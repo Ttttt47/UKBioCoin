@@ -1,0 +1,881 @@
+Now to check that each function is in cdf_base.cpp
+
+UTILS (CONSTANTS):
+X    * ML_POSINF             # positive infinity, defined in nmath.h, (1.0/0.0)
+X    * ML_NEGINF             # negative infinity, defined in nmath.h, (-1.0/0.0)
+X    * ML_NAN                # defined to be 0.0/0.0 in nmath.h
+X    * R_D__0                # ML_NEGINF or 0
+X    * R_D__1                # 0 or 1
+X    * R_DT_0                # depending on lower.tail, 0 or 1
+X    * R_DT_1                # depending on lower.tail, 0 or 1
+X    * ME_PRECISION          # seems to be set to 8 in nmath.h
+X    * ME_UNDERFLOW          # seems to be set to 16 in nmath.h
+X    * ME_RANGE              # defined to be 2 in nmath.h
+X    * ME_DOMAIN             # defined to be 1 in nmath.h
+X    * ME_NOCONV             # defined to be 4 in nmath.h
+X    * scalefactor           # big number to the power of 8, in pgamma.c
+X    * DBL_EPSILON           # 2^-52 = 2.220446049250313e-16; C++ in float.h
+X    * DBL_MIN               # 2.22507e-308; native to C++ in float.h
+X    * DBL_MAX               # 1.79769e+308; native to C++ in float.h
+X    * M_PI                  # cpp constant pi, included in math.h
+X    * M_1_SQRT_2PI          # 0.398942280401432677939946059934	/* 1/sqrt(2pi) */
+X    * M_LN_SQRT_2PI         # 0.918938533204672741780329736406 in "Rmath.h0.in"
+X    * M_LN_SQRT_PId2        # 0.225791352644727432363097614947 in "Rmath.h0.in"
+X    * M_LN2                 # 0.693147180559945309417232121458 in "Rmath.h0.in"
+X    * M_LOG10_2             # 0.301029995663981195213738894724 in "Rmath.h0.in"
+X    * M_SQRT_32             # 5.656854249492380195206754896838	/* sqrt(32) */
+X    * M_2PI                 # 6.283185307179586476925286766559	/* 2*pi */
+X    * CHAR_BIT              # included native to cpp (no need for float.h)
+X    * INT_MAX               # included native to cpp (no need for float.h)
+X    * FLT_RADIX             # included in math.h
+X    * FLT_MANT_DIG          # included in float.h
+X    * FLT_MIN_EXP           # included in float.h
+X    * FLT_MAX_EXP           # included in float.h
+X    * DBL_MANT_DIG          # included in float.h
+X    * DBL_MIN_EXP           # included in float.h
+X    * DBL_MAX_EXP           # included in float.h
+X    * M_cutoff              # M_LN2 * DBL_MAX_EXP / DBL_EPSILON; in pgamma.c
+
+"-" = included but not tested
+"+" = special case
+UTILS:
+X    * R_P_bounds_01         # basically, depending on lower.tail, returns 0 or 1
+X    * R_FINITE              # based on 'isfinite' from math.h, see nmath.h
+-    * MATHLIB_WARNING       # defined in nmath.h to call a warning or print
+-    * MATHLIB_WARNING4      # defined in nmath.h, warning with 4 arguments
+-    * MATHLIB_WARNING5      # defined in nmath.h, warning with 5 arguments
+-    * ML_ERROR              # chooses the error message, in nmath.h
+-    * ML_ERR_return_NAN     # returns NAN value, defined in nmath.h
+X   * ISNAN                 # using isnan, nmath.h, only used in lgammafn_sign
+X    * R_forceint            # basically, uses round, or "nearbyint"
+X    * R_D_Cval              # either p or (0.5-p+0.5 == 1-p), see dpq.h
+X    * R_D_exp               # defined as either x or exp(x); see dpq.h
+X    * R_D_fexp              # defined in terms of log, exp and sqrt; see dpq.h
+X    * R_ifDEBUG_printf      # print messages during debugging
++    * Rboolean              ### Problem: this should be just a boolean?
++    * REprintf              # print function
+
+
+
+
+NATIVE C++ (or in math.h):
+X    * fmod                  # included in math.h (modulus)
+X    * sin                   # included in math.h
+X    * log                   # included in math.h
+X    * sqrt                   # included in math.h
+X    * exp                   # included in math.h
+X    * pow                   # included in math.h
+X    * fabs                  # works with double, int warning, included in math.h
+X    * ldexp                 # ldexp(double, in) in math.h
+X    * lgamma                # included in math.h
+X    * << operator           # native to cpp?
+X    * round                 # included in math.h
+X    * nearbyint             # like round, included in math.h
+X    * fmod                  # included in math.h
+X    * isfinite              # included in math.h
+
+
+
+
+
+
+
+
+//----------------------------------------------------------//
+
+pt
+    -> Constants:
+X         ML_ERR_return_NAN       # Constant defined in header above
+X    //////////////////////////////////////////////////////////////////////////
+X    -> log                      # built-in cpp function, in math.h
+X    -> exp                      # built-in cpp function, in math.h
+X    -> fabs                     # built-in cpp function, in math.h
+X    -> R_D_Cval                 # Constant defined in UTILS above
+X    //////////////////////////////////////////////////////////////////////////
+X     -> log1p                    ### Semi-elementary, see below.
+X         -> chebyshev_init       ## CHECK: runs up to nos iterations!
+X         -> chebyshev_eval       # Elementary function using constant
+X         -> fabs                 # built-in cpp function, in math.h
+X         -> sqrt                 # built-in cpp function, in math.h
+X    //////////////////////////////////////////////////////////////////////////
+X     -> pnorm                    ## function defined below
+X         -> pnorm5               # alias
+X             -> pnorm_both       # simple function
+X                 -> exp          # built-in cpp function, in math.h
+X                 -> log1p        ## dependencies shown above
+X    //////////////////////////////////////////////////////////////////////////
+    -> pbeta                    ## function defined below
+        -> pbeta_raw            # basically depends on bratio
+            -> bratio**         ### Monster function with dependent functions
+                -> exp          # built-in cpp function, in math.h 
+                -> log          # built-in cpp function, in math.h
+                -> min          # built-in cpp function, in math.h
+                -> max          # built-in cpp function, in math.h
+                -> pow          # built-in cpp function, in math.h
+                -> log1p        ### Semi-elementary, see below.
+                -> fpser        ### Function defined below
+                -> apser        ### Function defined below
+                -> bpser        ### Function defined below
+                -> bup          ### Function defined below 
+                -> bgrat        ### Function defined below
+                -> basym        ### Function defined below
+                -> bfrac        ### Function defined below
+                -> R_Log1_Exp   # elementary functions
+    //////////////////////////////////////////////////////////////////////////
+X     -> lbeta                    ### Function defined just below
+X         -> log                  # built-in cpp function, in math.h
+X         -> lgamma               # built-in cpp function, in math.h
+X         -> log1p                ## dependencies shown above
+X         / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / 
+X         -> lgammacor            # relies on chebyshev_eval
+X             -> chebyshev_eval   # Elementary function using constant
+X         / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / 
+X         -> gammafn              
+X             -> chebyshev_init   # Elementary function using fabs
+X             -> chebyshev_eval   # Elementary function using constant  
+X             -> exp              # built-in cpp function, in math.h
+X             -> log              # built-in cpp function, in math.h
+X             -> sqrt             # built-in cpp function, in math.h
+X             -> fabs             # built-in cpp function, in math.h
+X             -> round            # built-in cpp function, in math.h 
+X             -> fmax2            # Handles NANs, kind of (see code)
+X             -> gammalims        # for loop up to 10, some constants
+X             -> stirlerr         # This is weird, creates a loop...
+X                 -> log          # built-in cpp function, in math.h
+X         / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / 
+X         -> lgammafn             # basically calls lgammafn_sign
+X             -> lgammafn_sign    # consists of several functions
+X                 -> log          # Elementary function part of cpp
+X                 -> fabs         # Elementary function part of cpp
+X                 -> trunc        # Elementary function part of cpp
+X                 -> sqrt         # Elementary function part of cpp
+X                 -> lgammacor    # dependencies shown above
+X                 -> sinpi        # simple function
+X                     -> fabs     # built-in cpp function, in math.h 
+X                     -> sin      # built-in cpp function, in math.h 
+        / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / 
+        /////////////////////////////////////////////////////////////////////
+//pt done
+
+X stirlerr uses 
+X     -> lgammafn, which uses
+X         -> lgammafn_sign, which uses
+X             -> gammafn, which uses
+X                 -> stirlerr
+
+//----------------------------------------------------------//
+
+//FUNCTIONS:
+
+
+X pt
+X     -> Constants:
+X         ML_ERR_return_NAN       # Constant defined in header above
+X     -> pnorm                    ## function defined below
+X     -> pbeta                    ## function defined below
+X     -> lbeta                    ### Function defined just below
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> log                      # built-in cpp function, in math.h
+X     -> exp                      # built-in cpp function, in math.h
+X     -> fabs                     # built-in cpp function, in math.h
+X     -> R_D_Cval                 # Constant defined in UTILS above
+
+
+X pchisq
+X     -> pgamma                   # only depends on pgamma, since related
+
+X pgamma
+X     -> CONSTANTS:
+X         R_DT_0                  # Constants defined above, see UTILS
+X         R_DT_1                  # Constants defined above, see UTILS
+X     -> pgamma_raw               ## Function defined below
+
+
+X pgamma_raw 
+X     -> REprintf                 # see UTILS
+X     -> R_P_bounds_01            # UTILS
+X     -> ML_ERR_return_NAN        # UTILS
+X     -> pgamma_smallx            # from pgamma.c, code below
+X     -> dpois_wrap               ### Function defined below
+X     -> ppois_asymp              ### Function defined below
+X     -> R_Log1_Exp               # Function defined below
+X     -> log1p                    # ELementary function, at bottom
+X     -> pd_upper_series          # just uses log and DBL_EPSILON
+X     -> pd_lower_series          # uses floor and pd_lower_cf
+X     -> pd_lower_cf              # uses fabs and DBL_EPSILON and a warning method
+
+
+X dpois_wrap
+X     -> Constants:
+X         R_D__0                  # Constant defined in header above
+X         M_cutoff                # Constant defined above and in pgamma.c
+X     -> REprintf                 # UTILS print function
+X     -> R_FINITE                 # UTILS function
+X     -> dpois_raw                ## Function defined below
+X     -> fabs                     # built in cpp function, in math.h
+X     -> R_D_exp                  # Function defined in UTILS above
+X     -> lgammafn                 ## Function defined below
+X     -> log                      # built in cpp function, in math.h
+
+
+X dpois_raw
+X     -> Constants:
+X         R_D__0                  # Constant defined in header above
+X         R_D__1                  # Constant defined in header above
+X         DBL_MIN                 # Constant defined above; see UTILS
+X         M_2PI                   # Constant defined above; see UTILS
+X     -> R_FINITE                 # UTILS function
+X     -> R_D_exp                  # Function defined in UTILS above
+X     -> R_D_fexp                 # Function defined in UTILS above
+X     -> log                      # built in cpp function, included in math.h
+X     -> lgammafn                 ## Fucntion defined below
+X     -> stirlerr                 ## Function defined below basedon lgammafn
+X     -> bd0                      ## Function defined below
+
+
+X stirlerr
+X     -> Constants
+X         hardcoded constants
+X         M_LN_SQRT_2PI           # Constant defined in header
+X     -> lgammafn                 # calls lgammafn_sign, defined below
+X     (straightforward)
+
+
+
+X bd0
+X     -> Constants:
+X         DBL_MIN                 # Constant defined above; see UTILS
+X     -> R_FINITE                 # UTILS function
+X     -> fabs                     # built in cpp function, included in math.h
+X     -> log                      # built in cpp function, included in math.h
+X     (for loop with max 1000 iterations, breaks when accuracy is reached)
+X     (j<<1 converts j=2 into j=21; essentially j = j *10 + 1)
+X     (only one log at the end; if loop does not "converge")
+
+
+
+
+X ppois_asymp
+X     -> Constants:
+X         hardcoded const arrays 
+X     -> REprintf                 # UTILS print function
+X     -> log1pmx                  ### semi-elementary defined below
+X     -> sqrt                     # built-in cpp function, math.h
+X     -> pnorm                    ### Function defined below
+X     -> dpnorm                   ## Function defined below, depends on dnorm
+X     -> dnorm                    ## Function defined below
+X     -> log1p                    # Elementary function, at bottom in log section
+X     (finite for-loops)
+
+
+X dpnorm
+X     -> Constants:
+X     -> fabs                     # built-in cpp function, in math.h
+X     -> exp                      # built-in cpp function, in math.h
+X     -> dnorm                    ## Function defined below
+X     (a do_while loop!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+X     (but, looking closely, should terminate quickly; only if x > 10, then
+X      until fabs(term) > 2^-52 * 1/x (approx), but term is always *10^-2, at least,
+X      so max 26 + 2 iterations, I guess. Still, scary that there is no check!)
+
+X dnorm
+X     -> dnorm4                   ## Function defined below
+
+
+X dnorm4
+X     -> Constants:
+X         ML_POSINF               # Constant defined in UTILS above
+X         R_D__0                  # Constant defined in UTILS above
+X         DBL_MAX                 # Constant defined in UTILS above
+X         M_LN_SQRT_2PI           # Constant defined in UTILS above
+X         M_1_SQRT_2PI            # Constant defined in UTILS above
+X         M_LN2                   # Constant defined in UTILS above
+X         DBL_MIN_EXP             # Constant defined in UTILS above
+X         DBL_MANT_DIG            # Constant defined in UTILS above
+X     -> ISNAN                    # returns x; only used here, see UTILS
+X     -> R_FINITE                 # UTILS function
+X     -> ML_ERR_return_NAN        # UTILS
+X     -> fabs                     # built-in cpp function, math.h
+X     -> sqrt                     # built-in cpp function, math.h
+X     -> log                      # built-in cpp function, math.h
+X     -> exp                      # built-in cpp function, math.h
+X     -> ldexp                    # built-in cpp function, described above
+X     -> R_forceint               # UTILS function
+   
+
+
+X pgamma_smallx
+X     -> CONSTANTS:
+X         DBL_EPSILON             # Constant defined above; see UTILS
+X     -> fabs                     # Included in cpp
+X     -> log                      # Included in cpp 
+X     -> log1p                    # Elementary function, at bottom in log section
+X     -> lgamma1p                 # semi-elementary, relies on a few functions below
+X     -> pow                      # built in cpp function, included in math.h
+X     -> exp                      # built in cpp function, included in math.h
+X     -> expm1                    # Elementary function, at bottom in log section
+
+
+X R_Log1_Exp
+X     -> CONSTANTS:
+X         M_LN2                   # Constant log(2) defined above; see UTILS
+X     -> log                      # built in cpp function, included in math.h
+X     -> exp                      # built in cpp function, included in math.h
+X     -> log1p                    # Elementary function, at bottom in log section
+X     -> expm1                    # Elementary function, at bottom in log section
+    
+
+
+//-----------------------------------------------------------------//
+X // Three pd_ functions, all very simply
+X // Only use log, floor, fabs, MATHLIB_WARNING and DBL_EPSILON
+X 
+X pd_upper_series
+X         -> CONSTANTS:
+X             DBL_EPSILON         # Constant defined above; see UTILS
+X         -> log                  # built-in cpp function, included in math.h
+X 
+X 
+X pd_lower_series
+X         -> CONSTANTS:
+X             DBL_EPSILON         # Constant defined above; see UTILS
+X         -> floor                # built in cpp function, included in math.h
+X         -> pd_lower_cf          # uses fabs and DBL_EPSILON and a warning method
+X 
+X 
+X pd_lower_cf
+X         -> CONSTANTS:
+X             DBL_EPSILON         # Constant defined above; see UTILS
+X         -> fabs                 # built in cpp function, included in math.h
+X         -> MATHLIB_WARNING      # just throws warning; see UTILS
+
+//-----------------------------------------------------------------//
+//gamma functions
+
+
+X lgamma1p
+X         -> CONSTANTS:
+X             40 hard-coded constants
+X         -> lgammafn                 # simply calls lgammafn_sign
+X         -> logcf                    ### simple function below
+X         -> log1pmx                  ### semi-elementary defined below
+
+X lgammafn
+X         -> calls lgammafn_sign      # Function defined below
+
+X lgammafn_sign
+X         -> CONSTANTS:
+X             a few hardcoded constants
+X             ML_POSINF               # Constant defined above
+X             M_LN_SQRT_2PI           # Constant defined above
+X             M_LN_SQRT_PId2          # Constant defined above
+X             ME_PRECISION            # Constant defined above
+X             ME_RANGE                # Constant defined above
+X         -> d1mach                   # Elementary function based on constants
+X         -> log                      # Elementary function part of cpp
+X         -> fabs                     # Elementary function part of cpp
+X         -> trunc                    # Elementary function part of cpp
+X         -> sqrt                     # Elementary function part of cpp
+X         -> gammafn                  ### function defined below
+X         -> lgammacor                ### function defined below
+X         -> sinpi                    ### function defined below
+X         -> ML_ERROR                 # UTILS function above, prints message
+X         -> ISNAN                    # returns x; only used here, see UTILS
+X         -> MATHLIB_WARNING          # function throws warning; see UTILS
+X         -> ML_ERR_return_NAN        # function returns nan value, see above
+
+
+X //relatively simple function, just many lines of computation of constants
+X //no loops, only four divisions, so 'constant time'
+X logcf
+X     -> fabs                         # built-in cpp function, in math.h
+X     -> scalefactor                  # big number to the power of 8, in pgamma.c
+
+
+
+X //because only relies on log1p, it is more or less 'constant'
+X log1pmx
+X     -> CONSTANTS:
+X         minLog1Value            # (defined in function)
+X         two                     # (simply 2, very odd???)
+X         tol_logcf               # 1e-14
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> logcf                    # Function defined above
+
+
+X expm1
+X     -> CONSTANTS:
+X         DBL_EPSILON             # see UTILS constants
+X     -> exp                      # built in cpp function, included in math.h
+X     -> log1p                    ### Semi-elementary, see below.
+ 
+
+
+X //sinpi(x) = sin (pi * x), with special values noted
+X sinpi
+X     -> CONSTANTS:
+X         M_PI                    # see UTILS constants, included in math.h
+X     -> fabs                     # built in cpp function
+X     -> sin                      # built in cpp function, in math.h
+X     -> ML_ERR_return_NAN        # UTILS function
+X     -> R_FINITE                 # UTILS function
+
+
+X gammafn
+X         -> Constants:
+X             42 hardcoded constants
+X             * ME_DOMAIN         # Constant defined in header above
+X             * ME_PRECISION      # Constant defined in header above
+X             * ME_RANGE          # Constant defined in header above
+X             * ME_UNDERFLOW      # Constant defined in header above
+X             * ML_NAN            # Constant defined in UTILS
+X             * ML_POSINF         # Constant defined in UTILS  
+X             * ML_NEGINF         # Constant defined in UTILS
+X         -> chebyshev_init       # Elementary function using fabs
+X         -> chebyshev_eval       # Elementary function using constant  
+X         -> exp                  # built-in cpp function, in math.h
+X         -> log                  # built-in cpp function, in math.h
+X         -> sqrt                 # built-in cpp function, in math.h
+X         -> fabs                 # built-in cpp function, in math.h
+X         -> round                # built-in cpp function, in math.h 
+X         -> fmax2                # Handles NANs, kind of (see code)
+X         -> gammalims            # for loop up to 10, some constants
+X         -> ML_ERROR             # Constant function defined in header above
+X         -> stirlerr             # function defined somewhere
+X                                 # NB: use math.h lgammaf
+
+X gammalims
+X         -> Constants:
+X             DBL_EPSILON         # Constant function defined in header above
+X         -> log                  # built in cpp function, included in math.h
+X         -> d1mach               # Elementary function based on constants
+X         -> ML_ERROR             # Constant function defined in header above
+X         -> ME_NOCONV            # Constant defined in nmath.h to be 4
+
+
+X lgammacor
+X         -> Constants:
+X             ML_ERR_return_NAN   # Constant defined in header above
+X             ME_UNDERFLOW        # Constant defined in header above
+X         -> chebyshev_eval       # Elementary function using constant
+
+//-----------------------------------------------------------------//
+
+
+
+
+
+X pnorm
+X     -> pnorm5                   # see function below, synonym for pnorm
+
+X pnorm5
+X     -> Constants:
+X         ML_ERR_return_NAN       # Constant defined in header above, see UTILS
+X         R_DT_0                  # Constant defined in header above, see UTILS
+X         R_DT_1                  # Constant defined in header above, see UTILS
+X     -> ISNAN                    # returns x; only used here, see UTILS
+X     -> R_FINITE                 # UTILS function
+X     -> pnorm_both               # see function below
+
+X pnorm_both
+X     -> Constants:
+X         vector a, 5 hardcoded contants
+X         vector b, 4 hardcoded contants
+X         vector c, 9 hardcoded contants
+X         vector d, 8 hardcoded contants
+X         vector p, 6 hardcoded contants
+X         vector q, 5 hardcoded contants
+X         Hardcoded 0.67448975
+X         other hardcoded upper/lower limits
+X         SIXTEN == 16
+X         DBL_MIN                 # Constant defined in header above
+X         DBL_EPSILON             # Constant defined in header above
+X         M_1_SQRT_2PI            # Constant defined in header above
+X         M_SQRT_32               # Constant defined in header above
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> exp                      # built-in cpp function, in math.h
+
+
+X pbeta
+X     -> Constants:
+X         R_DT_0                  # Constants defined above, see UTILS
+X         R_DT_1                  # Constants defined above, see UTILS
+X     -> ML_ERR_return_NAN        # Constant defined in header above
+X     -> ISNAN                    # returns x; only used here, see UTILS
+X     -> pbeta_raw                ### Function defined below
+
+
+X pbeta_raw
+X     -> Constants:
+X         M_LN2                   # Constants defined above, see UTILS
+X         R_DT_0                  # Constants defined above, see UTILS
+X         R_DT_1                  # Constants defined above, see UTILS
+X         ierr                    # hard-coded constant from 'bratio' below
+X     -> MATHLIB_WARNING4         # see UTILS; just another warning message
+X     -> bratio                   ### Function in toms708, written for Naval SWC
+
+
+X bratio** [because of Rboolean, need to recode]
+X     -> Constants:
+X         Several hard-coded constants
+X         DBL_MIN                 # Constant defined in header above
+X         ML_NEGINF               # Constant defined in UTILS
+X     -> ISNAN                    # returns x; only used here, see UTILS
+X     -> R_FINITE                 # UTILS function
+X     -> R_ifDEBUG_printf         # function for printing during debugging
+X     -> Rf_d1mach                ## function defined below (case for constants)
+X     -> Rboolean                 # TYPE, should be boolean
+X     -> exp                      # built-in cpp function, in math.h 
+X     -> log                      # built-in cpp function, in math.h
+X     -> min                      # built-in cpp function, in math.h
+X     -> max                      # built-in cpp function, in math.h
+X     -> pow                      # built-in cpp function, in math.h
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> fpser                    ### Function defined below
+X     -> apser                    ### Function defined below
+X     -> bpser                    ### Function defined below
+X     -> bup                      ### Function defined below 
+X     -> bgrat                    ### Function defined below
+X     -> basym                    ### Function defined below
+X     -> bfrac                    ### Function defined below
+X     -> R_Log1_Exp               # Function defined below; elementary functions
+X     -> REprintf                 # UTILS print function
+
+
+X Rf_i1mach
+X     -> Constants:
+X         CHAR_BIT                # Constant in UTILS above
+X         INT_MAX                 # Constant in UTILS above
+X         FLT_RADIX               # Constant in UTILS above
+X         FLT_MANT_DIG            # Constant in UTILS above
+X         FLT_MIN_EXP             # Constant in UTILS above
+X         FLT_MAX_EXP             # Constant in UTILS above
+X         DBL_MANT_DIG            # Constant in UTILS above
+X         DBL_MIN_EXP             # Constant in UTILS above
+X         DBL_MAX_EXP             # Constant in UTILS above
+    
+
+X exparg
+X     -> Constants:
+X         A few hardcoded constants.
+X     -> Rf_i1mach                    # function defined above, basically constants
+X     (Basically, a simple multiplication of constants, using switch of ints)
+
+
+
+X fpser
+X     -> Constants:
+X         a few hardcoded constants
+X     -> log                          # built-in cpp function, in math.h
+X     -> exp                          # built-in cpp function, in math.h
+X     -> exparg                       # function defined above, basically constants
+
+
+
+X apser
+X     -> Constants:
+X         hardcoded constants
+X     -> log                          # built-in cpp function, in math.h
+X     -> fabs                         # built-in cpp function, in math.h
+X     -> psi                          ## function defined below, simple
+
+
+
+X psi
+X     -> Constants:
+X         loads of hardcoded constants
+X         INT_MAX                     # Constant defined in header above
+X         Rf_d1mach                   ## function below (case for constants)
+X     -> fabs                         # built-in function for cpp, in math.h
+X     -> cos                          # built-in function for cpp, in math.h
+X     -> sin                          # built-in function for cpp, in math.h
+X     (Well-written code which only depends on constants and elemenary functions)
+X     (No while loops, only 'constant' for loops, so 'constant' computation time)
+    
+
+
+
+X bpser
+X     -> Constants:
+X         hardcoded constants
+X         R_D__0                  # Constant defined in header above
+X     -> log                      # built-in function for cpp, in math.h
+X     -> min                      # built-in function for cpp, in math.h
+X     -> exp                      # built-in function for cpp, in math.h
+X     -> pow                      # built-in function for cpp, in math.h
+X     -> betaln                   ## function defined below
+X     -> gam1                     ## function defined below
+X     -> gamln1                   ## function defined below
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> algdiv                   ## function defined below
+X     -> MATHLIB_WARNING3         ## another warning function
+
+
+X betaln
+X     -> Constants:
+X         hardcoded
+X     -> gamln                    ## function defined below
+X     -> algdiv                   ## function defined below
+X     -> alnrel                   ## function defined below
+X     -> gsumln                   ## function defined below
+X     -> bcorr                    ## function defined below
+X     -> log                      # built-in function, included in math.h
+
+
+X gamln
+X     -> Constants
+X         hardcoded
+X     -> gamln1                   # function defined below; simple
+X     -> log                      # built-in function, included in math.h
+X     (contains a for loop which depends on the argument, but is max of 8)
+X     (so constant)
+
+
+X gamln1
+X     -> Constants:
+X         hardcoded
+X     (Simple multiplcation and division)
+
+
+X gam1
+X     -> Constants:
+X         hardcoded
+X     -> R_ifDEBUG_printf         # function for printing during debugging
+X     (Simple function with multiplcation and division)
+
+
+X gsumln
+X     -> Constants
+X         hardcoded constants
+X     -> gamln1                   ## function defined above; simple
+X     -> alnrel                   ## function defined above; simple
+X     -> log                      # built-in function in cpp, in math.h
+
+
+X bcorr
+X     -> Constants:
+X         hardcoded constants
+X     -> min                      # built-in cpp function, included in math.h
+X     -> max                      # built-in cpp function, included in math.h
+X     (Interesting function; only computes value for a finite number of terms
+X      in the sum; what is the accuracy?)
+
+
+
+X algdiv
+X     -> Constants:
+X         hardcoded constants
+X     -> alnrel                   ## function defined below
+X     -> log                      # built-in function, in math.h
+
+
+X alnrel
+X     -> Constants:
+X         hardcoded constants
+X     -> fabs                     # built-in function, in math.h
+X     -> log                      # built-in function, in math.h
+
+
+// above this line, bpser is defined, and all subfunctions defined
+
+
+X bup
+X     -> Constants:
+X         hardcoded
+X     -> fabs                     # built-in function, in math.h
+X     -> exp                      # built-in function, in math.h
+X     -> log                      # built-in function, in math.h
+X     -> exparg                   ## function defined above
+X     -> brcmp1                   ## function defined below
+X     (for loop depends, ultimately, on n)
+
+
+X brcmp1
+X    -> Constants:
+X        hardcoded
+X    -> min                      # built-in function, in math.h
+X    -> max                      # built-in function, in math.h
+X    -> log                      # built-in function, in math.h
+X    -> exp                      # built-in function, in math.h
+X    -> fabs                     # built-in function, in math.h
+-    -> R_ifDEBUG_printf         # function for printing during debugging
+X    -> alnrel                   ## function defined above
+X    -> betaln                   ## function defined above
+X    -> gamln1                   ## function defined above
+X    -> algdiv                   ## function defined above
+X    -> gam1                     ## function defined above
+X    -> log1p                    ## function defined below
+X    -> esum                     ## function defined below
+X    -> rlog1                    ## function defined below
+
+
+X esum
+X     -> Constants:
+X         none
+X     -> exp                      # built-in cpp function, defined in math.h
+
+
+X rlog1
+X     -> Constants:
+X         hardcoded
+X     -> log                      # built-in cpp function, defined in math.h
+X     (other operations just multiplication and division)
+
+
+
+X bgrat
+X     -> Constants:
+X         hardcoded
+X         ML_NEGINF               # Constant defined in header above
+X     -> MATHLIB_WARNING5         # see UTILS above
+X     -> R_ifDEBUG_printf         # function for printing during debugging
+X     -> Rboolean                 # TYPE wtf? why not use boolean?
+X     -> log                      # built-in function in cpp, in math.h
+X     -> exp                      # built-in function in cpp, in math.h
+X     -> fabs                     # built-in function in cpp, in math.h
+X     -> alnrel                   ## function defined above
+X     -> gam1                     ## function defined above
+X     -> algdiv                   ## function defined above
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> grat_r                   ## function defined below
+X     -> logspace_add             ## function defined below
+X     (basically a nested for loop of n_terms_bgrat==30, so 30*31/2)
+
+
+X grat_r
+X     -> simple functon dependingon others already defined
+
+
+
+X basym
+X     -> Constants:
+X         hardcoded constants
+X         num_IT                  # iterations for for loop: 20, increases by 2
+X     -> rlog1                    ## function defined above
+X     -> exp                      # built-in cpp function, included in math.h
+X     -> log                      # built-in cpp function, included in math.h
+X     -> sqrt                     # built-in cpp function, included in math.h
+X     -> fabs                     # built-in cpp function, included in math.h
+X     -> bcorr                    ## function defined above
+X     -> erfc1                    ## function defined below
+X     (contains a nested for-loop; n, i, m, j - but bounded by num_IT)
+
+
+
+X erfc1
+X     -> Constants:
+X         hardcoded constants
+X     -> fabs                     # built-in cpp function, included in math.h
+X     -> exp                      # built-in cpp function, included in math.h
+X     -> exparg                   ## function defined above
+X     (no loops)
+
+
+
+X bfrac
+X     -> Constants:
+X         ML_NAN                  # Constant defined in UTILS
+X         ML_ERR_return_NAN       # Constant defined in header above
+X     -> R_ifDEBUG_printf         # function for printing during debugging
+X     -> REprintf                 # UTILS print function
+X     -> R_FINITE                 # UTILS function
+X     -> ISNAN                    # returns x; only used here, see UTILS
+X     -> MATHLIB_WARNING5         # see UTILS above
+X     -> fabs                     # built-in cpp function, in math.h
+X     -> log                      # built-in cpp function, in math.h
+X     -> brcomp
+        
+
+X brcomp
+X     -> Constants:
+X         hardcoded constants
+X         R_D__0                  # Constant defined in header above
+X         M_LN_SQRT_2PI           # Constant defined in header above
+X     -> R_D_exp                  # Function defined in UTILS above
+X     -> min                      # built-in cpp function, in math.h
+X     -> max                      # built-in cpp function, in math.h
+X     -> log                      # built-in cpp function, in math.h
+X     -> fabs                     # built-in cpp function, in math.h
+X     -> exp                      # built-in cpp function, in math.h
+X     -> sqrt                     # built-in cpp function, in math.h
+X     -> alnrel                   ## function defined above
+X     -> betaln                   ## function defined above
+X     -> gamln1                   ## function defined above
+X     -> gam1                     ## function defined above
+X     -> algdiv                   ## function defined above
+X     -> rlog1                    ## function defined above
+X     -> bcorr                    ## function defined above
+X     -> log1p                    ### Semi-elementary, see below.
+
+
+
+X lbeta
+X     -> Constants:
+X         ML_ERR_return_NAN       # Constant defined in header above
+X         ML_POSINF               # Constant defined in header above
+X         ML_NEGINF               # Constant defined in header above
+X         M_LN_SQRT_2PI           # Constant defined in header above
+X     -> log                      # built-in cpp function, in math.h
+X     -> lgamma                   # built-in cpp function, in math.h
+X     -> log1p                    ### Semi-elementary, see below.
+X     -> lgammacor                ## function defined above
+X     -> lgammafn                 ## function defined above, see lgammafn_sign
+X     -> gammafn                  ## function defined above
+
+
+//-----------------------------------------------------------------------//
+X // More elementary functions
+X 
+X //very accurate log(1+x); seems to be 32 significant figures
+X // besides sqrt, only complexity is in chebyshev_init, which
+X // has a for loop which runs `nos` times, where nos is typically 42 or 43
+X log1p
+X     -> Constants:
+X         43 defined constants
+X         ML_ERR_return_NAN           # Constant defined in header above, see UTILS
+X         ML_NEGINF                   # Constant defined in UTILS above 
+X         DBL_EPSILON                 # Constant defined in UTILS above
+X         ME_PRECISION                # Constant defined in UTILS above
+X     -> chebyshev_init               # Elementary function using fabs
+X     -> chebyshev_eval               # Elementary function using constants
+X     -> fabs                         # Included in cpp
+X     -> sqrt                         # Included in cpp
+X     -> #hypot                        # function declared but not used NOTE
+
+
+
+X //has a for loop which runs nos times, nos seems to typically be 42 or 43
+X chebyshev_init
+X     -> fabs                         # built-in cpp function, in math.h
+X     (runs up to nos iterations; not sure what limit of nos is! TODO: check!)
+
+
+X //constant time, no loops, simple constants hardcoded
+X chebyshev_eval
+X     -> Constants:
+X         ML_ERR_return_NAN           # Constant defined in header above, see UTILS
+X     (runs up to a maximum of 1000 iterations in a loop)
+
+
+X d1mach
+X     -> Rf_d1mach                ## function defined below (case for constants)
+
+
+X Rf_d1mach
+X     -> CONSTANTS:
+X         DBL_MIN                 # Constant defined in header above
+X         DBL_MAX                 # Constant defined in header above
+X         DBL_EPSILON             # Constant defined in header above
+X         M_LOG10_2               # Constant defined in header above
+X 
+
+//-----------------------------------------------------------------------//
+
+
+?hypot? doesn't seem to be used in log1p
+
+
+
+
+
+
