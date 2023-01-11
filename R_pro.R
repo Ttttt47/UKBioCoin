@@ -69,17 +69,20 @@ write.table(var_x, file='selected_snp/IA/2_covariance_matrix/var_x.table')
 
 ### 3. OATH algorithm
 library(glue)
-if (!dir.exists('selected_snp/IA/3_OATH_estimated')) dir.create('selected_snp/IA/3_OATH_estimated')
+library(data.table)
 # loading covariance
-var_x = read.table(glue('selected_snp/IA/2_covariance_matrix/var_x.table'))[[1]]
-cov_xy = as.data.frame(as.matrix(fread(file=glue('selected_snp/IA/2_covariance_matrix/cov_x_yz.table')),rownames=1))
-cov_yy = as.data.frame(as.matrix(fread(file=glue('selected_snp/IA/2_covariance_matrix/cov_yz_yz.table')),rownames=1))
+var_x = read.table(glue('./test_data/var_x_sam.table'))[[1]]
+cov_xy = as.data.frame(as.matrix(fread(file=glue('./test_data/cov_xy_sam.table')),rownames=1))
+cov_yy = as.data.frame(as.matrix(fread(file=glue('./test_data/cov_yy.table')),rownames=1))
+rownames(cov_yy) =colnames(cov_yy)
 
 p = length(var_x)
 n = 270000 # est. effective sample size
 total_pcs_num=20
 using_pcs_num=5
-phe_name = 'X6138.0.0'  # phenotype to reg
+phe_name = 'X31.0.0'  # phenotype to reg
+covar_name = c("X1160.0.0", "X1200.0.0", "X1289.0.0","PC1", "PC2", "PC3", "PC4", "PC5")
+
 all_covar_name = c(c('X2247.0.0','X21003.0.0','X31.0.0','X6138.0.0','X2050.0.0','X1200.0.0','X48.0.0','X49.0.0')[-4],sapply(c(1:total_pcs_num),function(i){glue('PC{i}')}))
 covar_num = length(all_covar_name) - total_pcs_num
 all_possible_3_combn = combn(all_covar_name[1:covar_num],3)
@@ -107,7 +110,10 @@ for (j in c(1:dim(all_possible_3_combn)[2])){
     b = matrix(Theta[2:d,1] / diag(Theta[2:d,2:d]),d-1,1)
     
     # compute regression parameter beta. and its variance
-    rv_Omega = solve(Omega)
+    tryCatch({rv_Omega = solve(Omega)},error = function(e){
+      
+    })
+    # rv_Omega = try(solve(Omega))
     beta = rv_Omega %*% Lambda %*% b
     var_beta = as.numeric((Theta[1,1]-t(beta)%*%Lambda%*%b)/(n-(d-2)-1))*rv_Omega
     
@@ -118,6 +124,7 @@ for (j in c(1:dim(all_possible_3_combn)[2])){
     # adding result to summary.
     reg_summary[i,2:5] = as.numeric(cbind(beta[1],sqrt(diag(var_beta)[1]),t_stats[1],p_val[1]))
   }
+  Sys.time()-start
   
   lm = read.table(glue('./selected_snp/IA/1_plink_prepare/1_test_single_reg.{covar_name[1]}.glm.linear'),header = T,comment.char='$')
   reg_summary$ID = lm$ID
