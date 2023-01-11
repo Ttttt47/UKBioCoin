@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "D:\\software\\cpplibs\\armadillo-11.4.2.tar\\armadillo-11.4.2\\include",
+                "D:\\software\\cpplibs\\eigen-3.4.0"
+            ],
+            "browse": {
+                "path": [
+                    "${workspaceRoot}",
+                    "D:\\software\\cpplibs"  /*此处设置为库的lib目录下*/
+                ]
+            },
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "D:\\software\\MSYS2\\mingw64\\bin\\gcc.exe",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
