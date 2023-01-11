@@ -67,7 +67,6 @@
         "stop_token": "cpp",
         "thread": "cpp",
         "cfenv": "cpp",
-        "cinttypes": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
         "csignal": "cpp",
