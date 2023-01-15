@@ -341,9 +341,8 @@ int main(int argc, char const *argv[])
     cal_summary_and_save(cov_xy_filename, var_x_filename, result_filename, Theta, covar);
     end = clock();
     double endtime=(double)(end-start)/CLOCKS_PER_SEC;
-    std::cout << "10000 step completed in " << endtime << " seconds." << endl;
-    std::cout << "You can kill the task now." << endl;
-    system("pause");
+    std::cout << "Completed in " << endtime << " seconds." << endl;
+
     return 0;
 }
 
