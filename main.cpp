@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -6,18 +7,17 @@
 #include <sstream>
 #include <limits>
 #include <Eigen/Dense>
+#include "tools/cpp_cdfs-master/cdf_chisqt/cdf_base.h"
 #include <Eigen/Core>
 #include <math.h>
 #include <ctime>
-#include "tools/cpp_cdfs-master/cdf_chisqt/cdf_base.h"
-
 #include <boost/program_options.hpp>
-
 
 using std::vector;
 using namespace std;
 using namespace Eigen;
 using namespace boost::program_options;
+
 
 
 Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta)
@@ -81,7 +81,7 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
     int word_id = 0;
     while (iline >> word)
     {   
-        word = word.substr(1,word.size()-2);
+        word = word.substr(1,word.size()-2);  // remove " and " around the covar name.
         bool flag = false;
         for (int i = 0; i < length_covar; i++)
         {
