@@ -242,7 +242,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         // writing results to table.
         // std::cout << summary << endl;
         line_id ++;
-        if (line_id%1000==0)
+        if (line_id%10000==0)
         {
             std::cout << line_id << endl;
         }
@@ -325,7 +325,7 @@ int main(int argc, char const *argv[])
     string var_x_filename = virtual_map["file"].as<std::string>() + "_var_x.table";
     string cov_yy_filename = virtual_map["file"].as<std::string>() + "_cov_yy.table";
     string result_filename = virtual_map["out"].as<std::string>() + "_results.table";
-    vector<string> covar = string_split_by_comma(virtual_map["covar"].as<std::string>());
+    vector<string> covar = string_split_by_comma(virtual_map["phe"].as<std::string>()+","+virtual_map["covar"].as<std::string>());
     // vector<string> covar = {"X31.0.0","X1160.0.0", "X1200.0.0", "X1289.0.0",
     //                         "PC1", "PC2", "PC3", "PC4", "PC5"};
     Matrix<double, Dynamic, Dynamic> Theta;
@@ -347,3 +347,4 @@ int main(int argc, char const *argv[])
 }
 
 // .\main.exe --file test_data/sam --phe X31.0.0 --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 --out test_data/test
+// .\main.exe --file UKB_R/136_1k --phe X102.0.0 --covar X21001.0.0,X1488.0.0,X24021.0.0,PC1,PC2,PC3,PC4,PC5 --out UKB_R/C_imp_res
