@@ -5,7 +5,9 @@ This project is currently developling...
 Examples can be found in `./test_data`
 
 # How to use UKBioCoin within docker images
-We have packed the UKBioCoin algorithm with the NSS calculated from UKBioBank data into a seamless docker image for convenient use. To use the image, you should first log in to the repository using:
+We have packed the UKBioCoin algorithm with the NSS calculated from UKBioBank data into a seamless docker image for convenient use. 
+Description of all the phenotype included in our data is given in `description of phenotype0327.csv`.
+To use the image, you should first log in to the repository using:
 
 ```
 docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
@@ -23,6 +25,7 @@ The data and the software are stored in /UKB. Note that the NSS data are compres
 ```
 tar -I 'zstd -v' -xvf 14M_15.tar.zst
 ```
+
 
 ## Running UKBiocoin in command line
 Here is an example using UKBioCoin in command line.
