@@ -6,7 +6,7 @@ Examples can be found in `./test_data`
 
 # How to use UKBioCoin within docker images
 We have packed the UKBioCoin algorithm with the NSS calculated from UKBioBank data into a seamless docker image for convenient use. 
-Description of all the phenotype included in our data is given in `./description of phenotype0327.csv` in the respotory. We also provide the first 20 PC as covarites, use them as `PC{n}` with `{n}` replace with integer ranging from 1 to 20 in the commandline. If you are using phenotype with FieldID `34`, replace it with `X34.0.0` in the commandline calling UKBioCoin algorithm.
+Description of all the phenotype included in our data is given in `./description of phenotype0327.csv` in the respotory. We also provide the first 20 PC as covarites, use them as `PC{n}` with `{n}` replaced with integer ranging from 1 to 20 in the commandline. If you are using phenotype with FieldID `34`, replace it with `X34.0.0` in the commandline calling UKBioCoin algorithm.
 
 To use the image, you should first log in to the repository using:
 
