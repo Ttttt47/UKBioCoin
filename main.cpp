@@ -321,18 +321,24 @@ int main(int argc, char const *argv[])
 		std::cout << des_cmd << std::endl;
 		return 0;
 	}
-	else if (virtual_map.count("file") && virtual_map.count("phe") && virtual_map.count("covar") && virtual_map.count("out"))
+	else if (virtual_map.count("file") && virtual_map.count("phe") && virtual_map.count("out"))
 	{
         std::cout << "Using parameter: " << std::endl;
         std::cout << "file = " << virtual_map["file"].as<std::string>() << std::endl;
 		std::cout << "phe = " << virtual_map["phe"].as<std::string>() << std::endl;
-        vector<string> covar = string_split_by_comma(virtual_map["covar"].as<std::string>());
-        std::cout << "covar = ";
-        for (int i = 0; i < covar.size(); i++)
+        if (virtual_map.count("covar"))
         {
-            std::cout << covar[i] << " ";
+            vector<string> covar = string_split_by_comma(virtual_map["covar"].as<std::string>());
+            std::cout << "covar = ";
+            for (int i = 0; i < covar.size(); i++)
+            {
+                std::cout << covar[i] << " ";
+            }
+        }else
+        {
+            std::cout << "No covar is given.";
         }
-        
+      
         std::cout << std::endl;
         std::cout << "out = " << virtual_map["out"].as<std::string>() << std::endl;
         std::cout << "Start computing..." << std::endl;
@@ -350,7 +356,13 @@ int main(int argc, char const *argv[])
     string cov_yy_filename = virtual_map["file"].as<std::string>() + "_cov_yy.table";
     string meta_filename = virtual_map["file"].as<std::string>() + "_meta.table";
     string result_filename = virtual_map["out"].as<std::string>() + "_results.table";
-    vector<string> covar = string_split_by_comma(virtual_map["phe"].as<std::string>()+","+virtual_map["covar"].as<std::string>());
+    vector<string> covar;
+    if (virtual_map.count("covar"))
+    {
+        covar = string_split_by_comma(virtual_map["phe"].as<std::string>()+","+virtual_map["covar"].as<std::string>());
+    }else{
+        covar = string_split_by_comma(virtual_map["phe"].as<std::string>());
+    }
     // vector<string> covar = {"X31.0.0","X1160.0.0", "X1200.0.0", "X1289.0.0",
     //                         "PC1", "PC2", "PC3", "PC4", "PC5"};
     Matrix<double, Dynamic, Dynamic> Theta;
