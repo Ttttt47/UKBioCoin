@@ -53,7 +53,7 @@ Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta)
     // std::cout << log10_p_val << endl;
     // .asDiagonal();
     Vector<double, 4> summary = {beta(0,0), sqrt(var_beta.diagonal()(0,0)),
-                                 t_stats[0], log10_p_val[0]};
+                                 t_stats[0], -log10_p_val[0]};
     return(summary);
 }
 
@@ -138,7 +138,7 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
     // exit(0);
 }
 
-void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string result_filename, Matrix<double, Dynamic, Dynamic> Theta, vector<string> covar)
+void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string meta_filename, string result_filename, Matrix<double, Dynamic, Dynamic> Theta, vector<string> covar)
 {
     ofstream fout;
     fout.open(result_filename, ios::out);
@@ -161,10 +161,20 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         cout << "Error opening " << var_x_filename << " for input" << endl;   
         exit(-1);  
     }
+
+    ifstream fin_meta;
+    fin_meta.open(meta_filename, ios::in);
+    if( !fin_meta )
+    {   
+        cout << "Error opening " << meta_filename << " for input" << endl;   
+        exit(-1);  
+    }
     string line;
     string line_x;
+    string line_meta;
     string word;
     string word_x;
+    string word_meta;
     double el=0;
     vector<double> line_data;
     
@@ -173,6 +183,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
     covar_id = covar_id.setOnes(length_covar)*-1;
     getline(fin, line); 
     getline(fin_x, line_x);
+    getline(fin_meta, line_meta);
 
     istringstream iline(line);
     int word_id = 0;
@@ -192,9 +203,19 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
     }
 
     int line_id = 0;
-    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "log10_P" << '\n';
-    while(getline(fin, line) && getline(fin_x, line_x))
-    {   
+    istringstream iline_meta(line_meta);
+    while (iline_meta >> word_meta)
+    {
+        fout << word_meta << ' ';
+    }
+    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "-log10_P" << '\n';
+    while(getline(fin, line) && getline(fin_x, line_x) && getline(fin_meta, line_meta))
+    {    
+        istringstream iline_meta(line_meta);
+        while (iline_meta >> word_meta)
+        {
+            fout << word_meta << ' ';
+        }
         istringstream iline(line);
         iline >> word;  // ignore first colunm.
         istringstream iline_x(line_x);
@@ -238,6 +259,9 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         // calculating summary data 
         Vector<double, Dynamic> s;
         Vector<double, 4> summary = cal_summary(Theta);
+
+
+
         fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << '\n';
         // writing results to table.
         // std::cout << summary << endl;
@@ -324,6 +348,7 @@ int main(int argc, char const *argv[])
     string cov_xy_filename = virtual_map["file"].as<std::string>() + "_cov_xy.table";
     string var_x_filename = virtual_map["file"].as<std::string>() + "_var_x.table";
     string cov_yy_filename = virtual_map["file"].as<std::string>() + "_cov_yy.table";
+    string meta_filename = virtual_map["file"].as<std::string>() + "_meta.table";
     string result_filename = virtual_map["out"].as<std::string>() + "_results.table";
     vector<string> covar = string_split_by_comma(virtual_map["phe"].as<std::string>()+","+virtual_map["covar"].as<std::string>());
     // vector<string> covar = {"X31.0.0","X1160.0.0", "X1200.0.0", "X1289.0.0",
@@ -338,7 +363,7 @@ int main(int argc, char const *argv[])
     Theta.block(2,0,d-1,1) = Theta_0.block(1,0,d-1,1);
     Theta.block(2,2,d-1,d-1) = Theta_0.block(1,1,d-1,d-1);
 
-    cal_summary_and_save(cov_xy_filename, var_x_filename, result_filename, Theta, covar);
+    cal_summary_and_save(cov_xy_filename, var_x_filename, meta_filename, result_filename, Theta, covar);
     end = clock();
     double endtime=(double)(end-start)/CLOCKS_PER_SEC;
     std::cout << "Completed in " << endtime << " seconds." << endl;

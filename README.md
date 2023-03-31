@@ -19,7 +19,7 @@ swr.cn-east-3.myhuaweicloud.com
 Then pull the image using:
 
 ```
-docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v3
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v4
 ```
 
 The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
@@ -31,12 +31,12 @@ tar -I 'zstd -v' -xvf 14M_15.tar.zst
 ## Running UKBiocoin in command line
 Here is an example using UKBioCoin in command line.
 ```{bash}
-.\main.exe --file test_data/sam \ 
+UKBioCoin --file test_data/sam \ 
             --phe X31.0.0 \
             --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 \
             --out test_data/test
 ```
-`--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`.
+`--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
 
 `--phe`: Specifies the phenotype to be analyzed. In this example, it is set to `X31.0.0`.
 
@@ -49,11 +49,10 @@ The regression results file is typically a tabular format that presents the esti
 
 for example:
 ```
-BETA SE T-STAT log10_P
-2.58495 0.317914 8.13097 -15.3689
--0.0746259 0.0386125 -1.93269 -1.27347
-0.130353 0.0612135 2.12948 -1.47866
-0.388451 0.390303 0.995254 -0.495375
+#CHROM POS ID REF ALT A1 ALT_FREQS BETA SE T-STAT -log10_P
+1 10511 rs534229142 A G A 0.998718 2.58495 0.317914 8.13097 15.3689
+1 13453 rs568927457 C T C 0.993553 2.58495 0.317914 8.13097 15.3689
+1 13483 rs554760071 C G C 0.994934 -0.0746259 0.0386125 -1.93269 1.27347
 ...
 ```
 
@@ -73,6 +72,20 @@ UKBioCoin uses Naive Summary Statistics as input, which includes files with the 
 
 UKBioCoin uses Naive Summary Statistics as input, which includes files with the same prefix and three different suffixes: `_cov_xy.table`, `_cov_yy.table`, and `_var_x`.table. For example, `sam_cov_xy.table`, `sam_cov_yy.table`, and `sam_var_x.table`. These three files represent the covariance matrix between SNPs and phenotypes, the covariance matrix of phenotypes, and the variance of all the SNPs.
 
+## xxx_meta.table
+
+For the `xxx_meta.table` format, the first row lists all the metadata fields' names. These metadata are information about the SNPs to be added to the collunms of the result file, So the number of rows of it should be the same with `xxx_var_x.table`(which is equal to the number of SNPs). You can tailor them with your interests.
+
+For example:
+
+```
+#CHROM POS ID REF ALT A1 ALT_FREQS
+1 10511 rs534229142 A G A 0.998718
+1 13453 rs568927457 C T C 0.993553
+1 13483 rs554760071 C G C 0.994934
+...
+```
+
 ## xxx_cov_xy.table
 
 For the `xxx_cov_xy.table` format, the first row lists all the phenotypes, including principal components, as column names. Each subsequent row represents a single SNP and contains covariances between that SNP and all the phenotypes. The first column in each row is the row number, enclosed in quotes, and the remaining columns contain the covariance values.
@@ -84,6 +97,7 @@ For example:
 "1" 0.245 0.168 0.322 0.054 0.003
 "2" 0.082 0.316 0.154 0.092 0.007
 "3" -0.015 -0.062 -0.042 -0.012 0.001
+...
 ```
 
 ## xxx_cov_yy.table
@@ -111,4 +125,5 @@ For example:
 "1" 0.153
 "2" 0.214
 "3" 0.082
+...
 ```
