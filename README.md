@@ -40,7 +40,7 @@ UKBioCoin --file test_data/sam \
 
 `--phe`: Specifies the phenotype to be analyzed. In this example, it is set to `X31.0.0`.
 
-`--covar`: Specifies the covariates to be included in the analysis. Multiple covariates can be included by separating them with commas and no space in between. In this example, the covariates included are `X1160.0.0`, `X1200.0.0`, `X1289.0.0`, `PC1`, `PC2`, `PC3`, `PC4`, and `PC5`.
+`--covar`: Specifies the covariates to be included in the analysis. Multiple covariates can be included by separating them with commas and no space in between. In this example, the covariates included are `X1160.0.0`, `X1200.0.0`, `X1289.0.0`, `PC1`, `PC2`, `PC3`, `PC4`, and `PC5`. If you don't want any covariates, skip these parameter.
 
 `--out`: Specifies the output file prefix. In this example, it is set to `test_data/test`. The output files will have this prefix.
 
