@@ -82,7 +82,6 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
     while (iline >> word)
     {   
         word = word.substr(1,word.size()-2);  // remove " and " around the covar name.
-        bool flag = false;
         for (int i = 0; i < length_covar; i++)
         {
             if (word == colnames[i])
@@ -92,6 +91,18 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
             }
         }
         word_id++;
+    }
+    bool err_flag = false;
+    string cov_notfind = "";
+    for (int i = 0; i < length_covar; i++){
+        if (covar_id[i] == -1){
+            err_flag = true;
+            cov_notfind = cov_notfind + " " + colnames[i];
+        }
+    }
+    if (err_flag){
+        cout << "Error: phenotypes/covariates" << cov_notfind << " not find in the input file." << endl;   
+        exit(-1); 
     }
     // std::cout << covar_id << endl;
     
@@ -126,8 +137,6 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
                     }
                 }
             }
-            
-
             word_id ++;
         }
         line_id ++;
