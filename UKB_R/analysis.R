@@ -212,7 +212,7 @@ manhattan(data.frame(CHR = plink_res_0pc[ids]$`#CHROM`,
 manhattan(data.frame(CHR = plink_res_5pc[ids]$`#CHROM`,
                      BP = plink_res_5pc[ids]$`POS`,
                      SNP = plink_res_5pc[ids]$`ID`,
-                     P = plink_res_0pc[ids]$`P`),
+                     P = plink_res_5pc[ids]$`P`),
           col = c('#30A9DE','#EFDC05','#E53A40','#090707'),#交替使用颜色展示
           suggestiveline = -log10(1e-05),#－log10(1e－5)处添加"suggestive"横线
           genomewideline = -log10(5e-08),#－log10(5e－10)处添加"genome-wide sigificant"横线
@@ -223,7 +223,7 @@ manhattan(data.frame(CHR = plink_res_5pc[ids]$`#CHROM`,
 manhattan(data.frame(CHR = plink_res_10pc[ids]$`#CHROM`,
                      BP = plink_res_10pc[ids]$`POS`,
                      SNP = plink_res_10pc[ids]$`ID`,
-                     P = plink_res_0pc[ids]$`P`),
+                     P = plink_res_10pc[ids]$`P`),
           col = c('#30A9DE','#EFDC05','#E53A40','#090707'),#交替使用颜色展示
           suggestiveline = -log10(1e-05),#－log10(1e－5)处添加"suggestive"横线
           genomewideline = -log10(5e-08),#－log10(5e－10)处添加"genome-wide sigificant"横线
@@ -237,6 +237,39 @@ task_name=paste(task_prefix,'-',phe_name,'-',PC_num,'PC',sep='')
 
 ## analysis outlier SNPs
 
+fwrite(phes[!all_ids$V1%in%setdiff(all_ids$V1,sub_ids$IID)],"/public3/project_users/chengb/hjc/projects/MR/pheno/valid_584pheno_20pcs_withcolnames_scaled.table",sep=' ',na='NA', col.names = T, quote=F)
 
+out = (oa$SE>0.8)
+out_snps = oa[out]$ID[1:100]
 
+# 
+plink   --bfile /public3/project_users/chengb/hjc/data/UKB_white_Impute_10M_BF \
+--extract ./outlier_ids.txt \
+--out outlier \
+--recode 
+out_ped = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/analysis/outlier.ped")
+out_map = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/analysis/outlier.map")
+meta = fread()
+out_meta = meta[out][1:100]
 
+phes = fread("/public3/project_users/chengb/hjc/projects/MR/pheno/584pheno_20pcs_withcolnames_scaled.table")[1:292216]
+phe = phes[,c('X4079.0.0','X31.0.0')]
+
+out_ped = as.matrix(out_ped)
+data = matrix(NA,dim(out_ped)[1],100)
+for (i in c(1:100)) {
+  data[,i] = as.numeric(out_ped[,(6+2*i-1)]==out_meta[i]$ALT) + as.numeric(out_ped[,(6+2*i)]==out_meta[i]$ALT)
+  print(i)
+}
+data[out_ped[,seq(7,206,2)]==0] = NA
+
+X = cbind(data[,3],phes$X31.0.0)
+Y = phes$X4079.0.0
+cases = complete.cases(cbind(X,Y))
+X = X[cases,]
+Y = Y[cases]
+solve(t(X)%*%X)%*%(t(X)%*%Y)
+
+oa[out][1:5]
+
+lm(formula = y ~ x+z, data = data.frame(y=phes$X4079.0.0,z=phes$X31.0.0,x=data[,1]))
