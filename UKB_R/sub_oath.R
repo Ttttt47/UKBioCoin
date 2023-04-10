@@ -12,7 +12,7 @@ for(phe_name in phe_names)
       covariates = paste0(covars,collapse = ',')
     }else{
       PCs = paste0('PC',1:PC_num,collapse = ',')
-      covariates = paste0(PCs,covars,collapse = ',')
+      covariates = paste0(PCs,',',covars)
     }
     
     
