@@ -20,19 +20,20 @@ using namespace boost::program_options;
 
 
 
-Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta)
+Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta, int n)
 {   
-    int n = 270000;  // estimated. effective sample size.
     int d = Theta.rows();
-    Matrix<double, Dynamic, Dynamic> Omega = Theta.block(1,1,d-1,d-1);
+    Matrix<double, Dynamic, Dynamic> Omega = n * Theta.block(1,1,d-1,d-1);
     Matrix<double, Dynamic, Dynamic> Lambda = Omega.diagonal().asDiagonal();
-    Matrix<double, Dynamic, Dynamic> b = Theta.block(1,0,d-1,1).array() / Omega.diagonal().array();
+    Matrix<double, Dynamic, Dynamic> b = Theta.block(1,0,d-1,1).array() / (Theta.block(1,1,d-1,d-1)).diagonal().array();
     
     Matrix<double, Dynamic, Dynamic> rv_Omega = Omega.inverse();
     Matrix<double, Dynamic, Dynamic> beta = rv_Omega * Lambda * b;
-    Matrix<double, Dynamic, Dynamic> temp = (Theta.block(0,0,1,1) - (beta.transpose() * Lambda * b))/(n-(d-2)-1);
+    Matrix<double, Dynamic, Dynamic> temp = (n - (beta.transpose() * Omega * beta).array())/(n-(d-2)-1);
+    // Matrix<double, Dynamic, Dynamic> temp = (1 - (beta.transpose() * Lambda * b).array())/(n-(d-2)-1);
+    // std::cout << temp << endl;
     Matrix<double, Dynamic, Dynamic> var_beta = temp(0,0) * rv_Omega;
-
+    
     // beta and SE.
     Vector<double, Dynamic> t_stats = beta.array() / var_beta.diagonal().array().sqrt().array();
     Vector<double, Dynamic> log_p_val;
@@ -147,7 +148,7 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
     // exit(0);
 }
 
-void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string meta_filename, string result_filename, Matrix<double, Dynamic, Dynamic> Theta, vector<string> covar)
+void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string meta_filename, string result_filename, Matrix<double, Dynamic, Dynamic> Theta, vector<string> covar, int n)
 {
     ofstream fout;
     fout.open(result_filename, ios::out);
@@ -267,7 +268,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         // std::cout << Theta.row(1) << endl;
         // calculating summary data 
         Vector<double, Dynamic> s;
-        Vector<double, 4> summary = cal_summary(Theta);
+        Vector<double, 4> summary = cal_summary(Theta, n);
 
 
 
@@ -307,8 +308,8 @@ int main(int argc, char const *argv[])
 		("file", boost::program_options::value<std::string>(), "Names of the covariance matrices.")
 		("phe", boost::program_options::value<std::string>(), "Name of the phenotype that match the column names in the covariace matrix.")
 		("covar", boost::program_options::value<std::string>(), "Names of the covariates that match the column names in the covariace matrix, seperated by comma and nothing else. e.g. \"X1,X2,X3\".")
-		("out", boost::program_options::value<std::string>(), "prefix of the output file.");
-
+		("out", boost::program_options::value<std::string>(), "prefix of the output file.")
+        ("size", boost::program_options::value<int>(), "Sample size of the regression, default is 270000.");
 	boost::program_options::variables_map virtual_map;
 	try
 	{
@@ -319,6 +320,7 @@ int main(int argc, char const *argv[])
 	// 定义消息
 	boost::program_options::notify(virtual_map);
 	
+    int n;
 	// 无参数直接返回
 	if (virtual_map.empty())
 	{
@@ -342,13 +344,21 @@ int main(int argc, char const *argv[])
             for (int i = 0; i < covar.size(); i++)
             {
                 std::cout << covar[i] << " ";
+                
             }
+            std::cout << std::endl;
         }else
         {
-            std::cout << "No covar is given.";
+            std::cout << "No covar is given." << std::endl;
         }
-      
-        std::cout << std::endl;
+        if (virtual_map.count("size"))
+        {
+            n = virtual_map["size"].as<int>();
+        }
+        else{
+            n = 270000;  // default sample size
+        }
+        std::cout << "Sample size set as " << n << std::endl;
         std::cout << "out = " << virtual_map["out"].as<std::string>() << std::endl;
         std::cout << "Start computing..." << std::endl;
 	}
@@ -384,7 +394,7 @@ int main(int argc, char const *argv[])
     Theta.block(2,0,d-1,1) = Theta_0.block(1,0,d-1,1);
     Theta.block(2,2,d-1,d-1) = Theta_0.block(1,1,d-1,d-1);
 
-    cal_summary_and_save(cov_xy_filename, var_x_filename, meta_filename, result_filename, Theta, covar);
+    cal_summary_and_save(cov_xy_filename, var_x_filename, meta_filename, result_filename, Theta, covar, n);
     end = clock();
     double endtime=(double)(end-start)/CLOCKS_PER_SEC;
     std::cout << "Completed in " << endtime << " seconds." << endl;

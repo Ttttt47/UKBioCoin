@@ -1,17 +1,23 @@
-
-oath_dir = ''
+task_prefix = 'oath'
 data_file = '/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M'
-phe_names = paste0('X',read.table("/public3/project_users/chengb/hjc/projects/UKBioCoin/pheno_set_0320_3_162")$V1,'.0.0')
-PC_nums = c(5,10)
+phe_names = c('X2443.0.0')
+PC_nums = c(0,5,10)
+covars = c('X31.0.0')
 out_dir = '/public3/project_users/chengb/hjc/projects/UKBioCoin/oath_results/'
 
 for(phe_name in phe_names)
 {
   for(PC_num in PC_nums){
-    PCs = paste0('PC',1:PC_num,collapse = ',')
-    covariates = paste0(PCs)
+    if (PC_num==0){
+      covariates = paste0(covars,collapse = ',')
+    }else{
+      PCs = paste0('PC',1:PC_num,collapse = ',')
+      covariates = paste0(PCs,covars,collapse = ',')
+    }
     
-    task_name=paste('oath-',phe_name,'-',PC_num,'PC',sep='')
+    
+    
+    task_name=paste(task_prefix,'-',phe_name,'-',PC_num,'PC',sep='')
     qsub_file=paste0(task_name,'.txt')
     jobname=task_name  
     logname=paste(task_name,'.log',sep='') 
@@ -40,11 +46,11 @@ for(phe_name in phe_names)
     cat('source ~/.bashrc\n')
     cat('\n')
     
-    cat(sprintf("%s --file %s --phe %s --covar %s --out %s \n",oath_dir, data_file,phe_name,covariates,out))
+    cat(sprintf("/public3/project_users/chengb/hjc/projects/UKBioCoin/Cpp/UKBioCoin --file %s --phe %s --covar %s --out %s \n",data_file,phe_name,covariates,out))
     
     sink()
     com=paste('qsub',qsub_file)
     system(com)
-    # wait the task to initialize
   }
 }
+  
