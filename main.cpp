@@ -77,7 +77,7 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
 
     Matrix<double, Dynamic, Dynamic> Theta;
     
-    getline(fin, line);  // skip first line.
+    getline(fin, line);  // colname lines
     istringstream iline(line);
     int word_id = 0;
     while (iline >> word)

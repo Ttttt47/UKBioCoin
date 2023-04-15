@@ -15,14 +15,19 @@ pattern = "X\\d+\\.0\\.0"
 str_extract_all(string, pattern)
 
 ## calculating covariance
+setwd('/public3/project_users/chengb/hjc/projects/UKBioCoin')
 library(glue)
 library(data.table)
 phes = read.table('/public3/project_users/chengb/hjc/projects/MR/pheno/pheno_set_0320_3_162')$V1
 phes = paste0('X',phes,'.0.0')
 
 PCs = paste0('PC',1:20)
-freq = read.table("/public3/project_users/chengb/hjc/projects/UKBioCoin/10M.allel.freq.afreq",header=T,comment.char='$')
-var_x = 2*freq$ALT_FREQS*(1-freq$ALT_FREQS) # for human and other diploid, var=2pq
+gcount = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/UKB_14M_geno_count.gcount")
+Ns = rowSums(gcount[,c(5,6,7)])
+var_x = (4*gcount[,5]+gcount[,6])/Ns - (2*gcount[,5]/Ns+gcount[,6]/Ns)^2
+var_x = var_x$HOM_REF_CT
+# freq = read.table("/public3/project_users/chengb/hjc/projects/UKBioCoin/10M.allel.freq.afreq",header=T,comment.char='$')
+# var_x = 2*freq$ALT_FREQS*(1-freq$ALT_FREQS) # for human and other diploid, var=2pq
 cov_xy = matrix(0,length(var_x),length(PCs)+length(phes))
 for (i in 1:length(c(PCs,phes))){
   print(i)
@@ -40,10 +45,14 @@ cov_yy = cov(scaled_pheno,use='pairwise')
 colnames(cov_yy) = colnames(cov_xy)
 rownames(cov_yy) = colnames(cov_xy)
 # saving covariance matrix
-fwrite(cov_xy,file='./matrix/10M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = T)
-fwrite(cov_yy,file='./matrix/10M_cov_yy.table',sep=' ',na='NA',row.names = T, col.names = T)
+!! pay attention to the rownames 
+# you can use the following line to write the first lines and edit the rownames manually,
+# and run it again with append=T and col.names=F
+fwrite(cov_xy,file='./matrix/14M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = T, nThread=16)
 
-write.table(cov_xy, file='./matrix/14M_cov_xy.table', row.names = T, col.names = T, sep = ' ')
+# fwrite(cov_yy,file='./matrix/14M_cov_yy.table',sep=' ',na='NA',row.names = T, col.names = T)
+
+# write.table(cov_xy, file='./matrix/14M_cov_xy.table', row.names = T, col.names = T, sep = ' ')
 write.table(cov_yy, file='./matrix/14M_cov_yy.table', row.names = T, col.names = T, sep = ' ')
 write.table(var_x, file='./matrix/14M_var_x.table')
 

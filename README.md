@@ -19,7 +19,7 @@ swr.cn-east-3.myhuaweicloud.com
 Then pull the image using:
 
 ```
-docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v4
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v5
 ```
 
 The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
@@ -34,7 +34,8 @@ Here is an example using UKBioCoin in command line.
 UKBioCoin --file test_data/sam \ 
             --phe X31.0.0 \
             --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 \
-            --out test_data/test
+            --out test_data/test \
+            --size 270000
 ```
 `--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
 
@@ -44,15 +45,18 @@ UKBioCoin --file test_data/sam \
 
 `--out`: Specifies the output file prefix. In this example, it is set to `test_data/test`. The output files will have this prefix with `_results.table` ended, namely, `test_data/test_results.table`.
 
+`--size`: Sample size of the regression, default is 270000(0.9 times 300000, the sample size of our releasing data.)
+
 ## Output format
 The regression results file is typically a tabular format that presents the estimated coefficients and their associated statistical information for every SNPs, the ordering of the results are the same with the input NSS files.
 
 for example:
 ```
-#CHROM POS ID REF ALT A1 ALT_FREQS BETA SE T-STAT -log10_P
-1 10511 rs534229142 A G A 0.998718 2.58495 0.317914 8.13097 15.3689
-1 13453 rs568927457 C T C 0.993553 2.58495 0.317914 8.13097 15.3689
-1 13483 rs554760071 C G C 0.994934 -0.0746259 0.0386125 -1.93269 1.27347
+#CHROM ID POS REF_Allele ALT_Allele REF_FREQ BETA SE T-STAT -log10_P
+1 rs568927457 13453 C T 0.00119 0.00880088 0.0389788 0.225786 0.0854624
+1 rs554760071 13483 C G 0.001235 -0.10489 0.0382549 -2.74188 2.21401
+1 rs199856693 14933 A G 0.012111 -0.0148937 0.0122842 -1.21243 0.647142
+1 rs533630043 15585 A G 0.001922 -0.0610412 0.0306952 -1.98862 1.33028
 ...
 ```
 
@@ -62,7 +66,7 @@ for example:
 
 `T-STAT`: This column contains the t-statistic values for each coefficient, which indicate the strength of the evidence against the null hypothesis that the true coefficient is zero.
 
-`log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient, which measures the statistical significance of each predictor variable. The more negative the value, the more significant the variable is.
+`-log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient, which measures the statistical significance of each predictor variable. The more negative the value, the more significant the variable is.
 
 
 # How to use UKBioCoin with your own dataset
@@ -79,10 +83,11 @@ For the `xxx_meta.table` format, the first row lists all the metadata fields' na
 For example:
 
 ```
-#CHROM POS ID REF ALT A1 ALT_FREQS
-1 10511 rs534229142 A G A 0.998718
-1 13453 rs568927457 C T C 0.993553
-1 13483 rs554760071 C G C 0.994934
+#CHROM ID POS REF_Allele ALT_Allele REF_FREQ
+1 rs568927457 13453 C T 0.001190
+1 rs554760071 13483 C G 0.001235
+1 rs199856693 14933 A G 0.012111
+1 rs533630043 15585 A G 0.001922
 ...
 ```
 
