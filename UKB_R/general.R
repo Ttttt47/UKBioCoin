@@ -21,17 +21,20 @@ phes = read.table('/public3/project_users/chengb/hjc/projects/MR/pheno/pheno_set
 phes = paste0('X',phes,'.0.0')
 
 PCs = paste0('PC',1:20)
-freq = read.table("/public3/project_users/chengb/hjc/projects/UKBioCoin/10M.allel.freq.afreq",header=T,comment.char='$')
-var_x = 2*freq$ALT_FREQS*(1-freq$ALT_FREQS) # for human and other diploid, var=2pq
+
+gcount = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/UKB_14M_geno_count.gcount")
+var_x = (4*gcount[,5] + gcount[,6])/(292216-gcount[,10]) - ((2*gcount[,5] + gcount[,6])/(292216-gcount[,10]))^2
+var_x = var_x$
+# var_x = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_var_x.table")$x
 cov_xy = matrix(0,length(var_x),length(PCs)+length(phes))
 for (i in 1:length(c(PCs,phes))){
   print(i)
-  lm = fread(glue('./plink_temp/single_reg.{c(PCs,phes)[i]}.glm.linear'),header = T,nThread=4)
+  lm = fread(glue('/public3/project_users/chengb/hjc/projects/UKBioCoin/plink_temp/single_reg.{c(PCs,phes)[i]}.glm.linear'),header = T,nThread=16)
   cov_xy_slice = var_x * lm$BETA
   cov_xy[,i] = cov_xy_slice
 }
 
-scaled_pheno = fread(file="/public3/project_users/chengb/hjc/projects/MR/pheno/584pheno_20pcs_withcolnames_scaled.table")
+scaled_pheno = fread(file="/public3/project_users/chengb/hjc/projects/MR/pheno/valid_584pheno_20pcs_withcolnames_scaled.table")
 scaled_pheno = data.frame(scaled_pheno)[,c(PCs,phes)]
 colnames(cov_xy) = c(PCs,phes)
 
@@ -40,12 +43,25 @@ cov_yy = cov(scaled_pheno,use='pairwise')
 colnames(cov_yy) = colnames(cov_xy)
 rownames(cov_yy) = colnames(cov_xy)
 # saving covariance matrix
-fwrite(cov_xy,file='./matrix/10M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = T)
-fwrite(cov_yy,file='./matrix/10M_cov_yy.table',sep=' ',na='NA',row.names = T, col.names = T)
+fwrite(cov_xy[1:2,],file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = T, nThread=16)
+# edit the header manually and run
+fwrite(cov_xy,file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = F, append=T , nThread=16)
 
-write.table(cov_xy, file='./matrix/14M_cov_xy.table', row.names = T, col.names = T, sep = ' ')
-write.table(cov_yy, file='./matrix/14M_cov_yy.table', row.names = T, col.names = T, sep = ' ')
+# fwrite(cov_yy,file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_yy.table',sep=' ',na='NA',row.names = T, col.names = T)
+# write.table(cov_xy, file='./matrix/14M_cov_xy.table', row.names = T, col.names = T, sep = ' ')
+write.table(cov_yy, file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_yy.table', row.names = T, col.names = T, sep = ' ')
 write.table(var_x, file='./matrix/14M_var_x.table')
+
+#### meta
+afreq = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/UKB_14M_allel_freq.afreq")
+
+colnames(afreq)[3] = 'REF_Allele'
+colnames(afreq)[4] = 'ALT_Allele'
+afreq$REF_FREQ = 1-afreq$ALT_FREQS
+pvar = fread("/public3/project_users/chengb/DATA/ukb_white_impute_14M/UKB_white_Impute_10M_erase_dosage.pvar")
+afreq$POS = pvar$POS
+
+fwrite(afreq[,c(1,2,8,3,4,7)], file='./matrix/14M_meta.table',sep=' ',na='NA',row.names = F, col.names = T, quote=F)
 
 #### docker
 
