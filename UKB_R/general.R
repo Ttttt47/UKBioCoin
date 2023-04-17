@@ -15,17 +15,19 @@ pattern = "X\\d+\\.0\\.0"
 str_extract_all(string, pattern)
 
 ## calculating covariance
+setwd('/public3/project_users/chengb/hjc/projects/UKBioCoin')
 library(glue)
 library(data.table)
 phes = read.table('/public3/project_users/chengb/hjc/projects/MR/pheno/pheno_set_0320_3_162')$V1
 phes = paste0('X',phes,'.0.0')
 
 PCs = paste0('PC',1:20)
-
 gcount = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/UKB_14M_geno_count.gcount")
-var_x = (4*gcount[,5] + gcount[,6])/(292216-gcount[,10]) - ((2*gcount[,5] + gcount[,6])/(292216-gcount[,10]))^2
-var_x = var_x$
-# var_x = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_var_x.table")$x
+Ns = rowSums(gcount[,c(5,6,7)])
+var_x = (4*gcount[,5]+gcount[,6])/Ns - (2*gcount[,5]/Ns+gcount[,6]/Ns)^2
+var_x = var_x$HOM_REF_CT
+# freq = read.table("/public3/project_users/chengb/hjc/projects/UKBioCoin/10M.allel.freq.afreq",header=T,comment.char='$')
+# var_x = 2*freq$ALT_FREQS*(1-freq$ALT_FREQS) # for human and other diploid, var=2pq
 cov_xy = matrix(0,length(var_x),length(PCs)+length(phes))
 for (i in 1:length(c(PCs,phes))){
   print(i)
