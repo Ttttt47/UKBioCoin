@@ -109,4 +109,4 @@ meta = fread("/public3/project_users/chengb/hjc/projects/MR/pheno/description of
 meta = meta[FieldID %in% new_meta$FieldID,-c(16:19)]
 meta$missing_rate = new_meta$missing_rate
 colnames(meta)[16] = 'type'
-fwrite(meta,"/public3/project_users/chengb/hjc/projects/MR/pheno/description of phenotype0422.csv",quote=F)
+fwrite(meta,"/public3/project_users/chengb/hjc/projects/MR/pheno/description of phenotype0422.tsv",quote=F,sep='\t')
