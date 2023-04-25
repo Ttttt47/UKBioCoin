@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 27.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="图层_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 595.28 425.2" style="enable-background:new 0 0 595.28 425.2;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#FAD1AF;}
+	.st1{fill:none;stroke:#FFFFFF;stroke-width:0.75;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}
+	.st2{fill:#E9F4E6;}
+	.st3{fill:#A9CF9E;}
+	.st4{fill:#D8E9D1;}
+	.st5{fill:#040000;}
+	.st6{font-family:'ArialMT';}
+	.st7{font-size:12px;}
+</style>
+<rect x="200.2" y="187.49" class="st0" width="16.2" height="16.2"/>
+<rect x="200.2" y="187.49" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="206.52" class="st2" width="16.2" height="16.2"/>
+<rect x="200.2" y="206.52" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="222.72" class="st3" width="16.2" height="16.2"/>
+<rect x="200.2" y="222.72" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="238.92" class="st3" width="16.2" height="16.2"/>
+<rect x="200.2" y="238.92" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="257.95" class="st4" width="16.2" height="16.2"/>
+<rect x="200.2" y="257.95" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="274.15" class="st4" width="16.2" height="16.2"/>
+<rect x="200.2" y="274.15" class="st1" width="16.2" height="16.2"/>
+<rect x="200.2" y="290.35" class="st4" width="16.2" height="16.2"/>
+<rect x="200.2" y="290.35" class="st1" width="16.2" height="16.2"/>
+<text transform="matrix(1 0 0 1 190.2623 178.909)" class="st5 st6 st7">Weight</text>
+<text transform="matrix(1 0 0 1 221.0772 199.9995)" class="st5 st6 st7">SNP i</text>
+<text transform="matrix(1 0 0 1 221.0772 219.0396)"><tspan x="0" y="0" class="st5 st6 st7">S</tspan><tspan x="8" y="0" class="st5 st6 st7">e</tspan><tspan x="14.32" y="0" class="st5 st6 st7">x</tspan></text>
+<text transform="matrix(1 0 0 1 221.0772 235.2393)" class="st5 st6 st7">BMI</text>
+<text transform="matrix(1 0 0 1 221.0772 251.4292)" class="st5 st6 st7">Age</text>
+<text transform="matrix(1 0 0 1 221.0772 270.4692)" class="st5 st6 st7">PC1</text>
+<text transform="matrix(1 0 0 1 221.0772 286.6592)" class="st5 st6 st7">PC2</text>
+<text transform="matrix(1 0 0 1 221.0772 302.8594)" class="st5 st6 st7">PC3</text>
+</svg>
