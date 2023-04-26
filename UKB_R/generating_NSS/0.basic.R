@@ -76,5 +76,5 @@ cat('\n')
 
 cat(sprintf("plink2 \\
       --pfile  %s \\
-      --geno-count --out %s \\", pfile, out))
+      --geno-counts --out %s \\", pfile, out))
 sink()

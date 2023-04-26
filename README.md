@@ -19,7 +19,7 @@ swr.cn-east-3.myhuaweicloud.com
 Then pull the image using:
 
 ```
-docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v5
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v6
 ```
 
 The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
