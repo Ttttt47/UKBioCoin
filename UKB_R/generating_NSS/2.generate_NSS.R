@@ -32,13 +32,10 @@ cov_yy = cov(scaled_pheno,use='pairwise')
 colnames(cov_yy) = colnames(cov_xy)
 rownames(cov_yy) = colnames(cov_xy)
 
-# all_pheno = cbind(scaled_phe136[,-c(1,2)],scaled_pcs[,-c(1,2)])
-cov_yy = cov(scaled_pheno,use='pairwise')
-
 # this could be slow and take hours.
-write.table(cov_xy, file='./matrix/{sample}_cov_xy.table', row.names = T, col.names = T, sep = ' ')
-write.table(cov_yy, file='matrix/{sample}_cov_yy.table', row.names = T, col.names = T, sep = ' ')
-write.table(var_x, file='./matrix/{sample}_var_x.table')
+write.table(cov_xy, file=glue('./matrix/{sample}_cov_xy.table'), row.names = T, col.names = T, sep = ' ')
+write.table(cov_yy, file=glue('matrix/{sample}_cov_yy.table'), row.names = T, col.names = T, sep = ' ')
+write.table(var_x, file=glue('./matrix/{sample}_var_x.table'))
 
 # the './matrix/{sample}_meta.table' file could in tailored with your interests, 
 # for example, you can produce it from a plink generated frequency file

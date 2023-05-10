@@ -60,10 +60,10 @@ afreq = fread("/public3/project_users/chengb/hjc/projects/UKBioCoin/UKB_14M_alle
 colnames(afreq)[3] = 'REF_Allele'
 colnames(afreq)[4] = 'ALT_Allele'
 afreq$REF_FREQ = 1-afreq$ALT_FREQS
-pvar = fread("/public3/project_users/chengb/DATA/ukb_white_impute_14M/UKB_white_Impute_10M_erase_dosage.pvar")
+pvar = fread("/public3/project_users/chengb/DATA/ukb_white_impute_14M/UKB_white_Impute_10M_erase_dosage_excluede_palindrome.pvar")
 afreq$POS = pvar$POS
 
-fwrite(afreq[,c(1,2,8,3,4,7)], file='./matrix/14M_meta.table',sep=' ',na='NA',row.names = F, col.names = T, quote=F)
+fwrite(afreq[,c(1,2,8,9,3,4,7)], file='/public3/project_users/chengb/hjc/projects/UKBioCoin/0422/2.matrix/10M_meta.table',sep=' ',na='NA',row.names = F, col.names = T, quote=F)
 
 #### docker
 
