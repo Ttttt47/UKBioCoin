@@ -58,7 +58,7 @@ Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta, int 
     return(summary);
 }
 
-Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<string> colnames)
+Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<string> colnames, string y_missing_file,bool use_missing_file, double &non_missing_rate)
 {
     ifstream fin;
     fin.open(filename, ios::in);
@@ -105,7 +105,42 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
         cout << "Error: phenotypes/covariates" << cov_notfind << " not find in the input file." << endl;   
         exit(-1); 
     }
-    // std::cout << covar_id << endl;
+
+    if (y_missing_file!="" && use_missing_file){
+        ifstream fin_miss;
+        fin_miss.open(y_missing_file, ios::in);
+        if( !fin_miss )
+        {   
+            cout << "Error opening " << y_missing_file << " for input" << endl;   
+            exit(-1);  
+        }
+        string line_miss;
+        string word;
+
+        Matrix<double, Dynamic, Dynamic> Theta;
+        
+        while(getline(fin_miss, line_miss))
+        {
+            //cout << line_miss << endl;
+            istringstream iline(line_miss);
+            iline >> word;
+            word = word.substr(1,word.size()-2);
+            for (int i = 0; i < length_covar; i++)
+            {   
+                //cout << word << endl;
+                //cout << colnames[i] << endl;
+                if (word == colnames[i])
+                {   
+                    iline >> word;
+                    //cout << word << endl;
+                    non_missing_rate = non_missing_rate*(1-std::stod(word));
+                    //cout << non_missing_rate << endl;
+                    break;
+                }
+            }
+        }
+    }
+
     
     Theta.setZero(length_covar, length_covar);
     int line_id = 0;
@@ -148,7 +183,8 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
     // exit(0);
 }
 
-void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string meta_filename, string result_filename, Matrix<double, Dynamic, Dynamic> Theta, vector<string> covar, int n)
+void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string meta_filename, string result_filename,string x_missing_filename,string y_missing_filename ,Matrix<double, Dynamic, Dynamic> Theta,
+                             vector<string> covar, int n, double c, double quality_score, bool use_missing_file, bool use_missing_rate_estimate)
 {
     ofstream fout;
     fout.open(result_filename, ios::out);
@@ -179,13 +215,27 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         cout << "Error opening " << meta_filename << " for input" << endl;   
         exit(-1);  
     }
+    ifstream fin_missing_x;
+    
+    if (use_missing_file){
+        fin_missing_x.open(x_missing_filename, ios::in);
+        if( !fin_missing_x )
+        {   
+            cout << "Error opening " << x_missing_filename << " for input" << endl;   
+            exit(-1);  
+        }
+    }
+
     string line;
     string line_x;
     string line_meta;
+    string line_miss;
     string word;
     string word_x;
     string word_meta;
+    string word_miss;
     double el=0;
+    double c1;
     vector<double> line_data;
     
     int length_covar=covar.size();
@@ -194,6 +244,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
     getline(fin, line); 
     getline(fin_x, line_x);
     getline(fin_meta, line_meta);
+    getline(fin_missing_x, line_miss);
 
     istringstream iline(line);
     int word_id = 0;
@@ -218,9 +269,17 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
     {
         fout << word_meta << ' ';
     }
-    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "-log10_P" << '\n';
+    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "-log10_P" << ' ' << "nobs" << ' ' << "Quality-Score" << '\n';
     while(getline(fin, line) && getline(fin_x, line_x) && getline(fin_meta, line_meta))
-    {    
+    {   
+        
+        if (use_missing_file){
+            getline(fin_missing_x, line_miss);
+            istringstream iline_miss(line_miss);
+            iline_miss >> word_miss;  // ignore first colunm.
+            iline_miss >> word_miss; 
+            c1 = std::stod(word_miss);
+        }
         istringstream iline_meta(line_meta);
         while (iline_meta >> word_meta)
         {
@@ -267,12 +326,28 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         // std::cout << Theta.row(0) << endl;
         // std::cout << Theta.row(1) << endl;
         // calculating summary data 
-        Vector<double, Dynamic> s;
-        Vector<double, 4> summary = cal_summary(Theta, n);
+        // Vector<double, Dynamic> s;
+        int size;
+        if (use_missing_rate_estimate)
+        {   
+            size = floor(n*quality_score*(1-c1));
+
+        }else
+        {
+            size = floor(n*c);
+        }
+
+        Vector<double, 4> summary = cal_summary(Theta, size);
 
 
-
-        fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << '\n';
+        if (use_missing_file)
+        {
+            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << size << ' ' << quality_score*(1-c1) << '\n';
+        }else
+        {
+            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << size << ' ' << c << '\n';
+        }
+        
         // writing results to table.
         // std::cout << summary << endl;
         line_id ++;
@@ -305,11 +380,14 @@ int main(int argc, char const *argv[])
     boost::program_options::options_description des_cmd("\n Usage: Linear regression based on summary data. \n\n Options: \n");
 	des_cmd.add_options()
         ("help,h", "help")
+        ("use-missing-rate-file", "Whether missing rate files are available.")
+        ("use-missing-rate-estimate", "Whether use missing_rate files to estimate sample size.")
 		("file", boost::program_options::value<std::string>(), "Names of the covariance matrices.")
 		("phe", boost::program_options::value<std::string>(), "Name of the phenotype that match the column names in the covariace matrix.")
 		("covar", boost::program_options::value<std::string>(), "Names of the covariates that match the column names in the covariace matrix, seperated by comma and nothing else. e.g. \"X1,X2,X3\".")
 		("out", boost::program_options::value<std::string>(), "prefix of the output file.")
-        ("size", boost::program_options::value<int>(), "Sample size of the regression, default is 270000.");
+        ("totalsize", boost::program_options::value<int>(), "Total Sample size of the regression, default is 292216.")
+        ("overall-non-missing-rate", boost::program_options::value<double>(), "Overall non-missing rate, default is 0.9.");
 	boost::program_options::variables_map virtual_map;
 	try
 	{
@@ -321,6 +399,9 @@ int main(int argc, char const *argv[])
 	boost::program_options::notify(virtual_map);
 	
     int n;
+    double c=1;
+    bool use_missing_file;
+    bool use_missing_rate_estim;
 	// 无参数直接返回
 	if (virtual_map.empty())
 	{
@@ -351,18 +432,42 @@ int main(int argc, char const *argv[])
         {
             std::cout << "No covar is given." << std::endl;
         }
-        if (virtual_map.count("size"))
+
+        if (virtual_map.count("totalsize"))
         {
-            n = virtual_map["size"].as<int>();
+            n = virtual_map["totalsize"].as<int>();
         }
         else{
-            n = 270000;  // default sample size
+            n = 292216;  // default total sample size for UKB.
         }
-        std::cout << "Sample size set as " << n << std::endl;
+
+        use_missing_file = virtual_map.count("use-missing-rate-file");
+        use_missing_rate_estim = virtual_map.count("use-missing-rate-estimate");
+
+        if (use_missing_rate_estim)
+        {
+            if (! use_missing_file)
+            {
+                std::cout << "Missing rates files not found, exiting..." << std::endl;
+		        return 0;
+            }
+            std::cout << "using estimated Sample size." << std::endl;
+        } else
+        {
+            if (virtual_map.count("overall-non-missing-rate"))
+            {
+                c = virtual_map["overall-non-missing-rate"].as<double>();
+            }
+            else{
+                c = 0.9;  // default overall missing rate.
+            }
+            std::cout << "Sample size set as " << floor(c*n) << std::endl;
+        }
+        
         std::cout << "out = " << virtual_map["out"].as<std::string>() << std::endl;
         std::cout << "Start computing..." << std::endl;
 	}
-	else
+	else 
 	{
 		std::cout << "option error" << std::endl;
         return 0;
@@ -375,6 +480,8 @@ int main(int argc, char const *argv[])
     string cov_yy_filename = virtual_map["file"].as<std::string>() + "_cov_yy.table";
     string meta_filename = virtual_map["file"].as<std::string>() + "_meta.table";
     string result_filename = virtual_map["out"].as<std::string>() + "_results.table";
+    string x_missing_filename = "";
+    string y_missing_filename = "";
     vector<string> covar;
     if (virtual_map.count("covar"))
     {
@@ -382,19 +489,27 @@ int main(int argc, char const *argv[])
     }else{
         covar = string_split_by_comma(virtual_map["phe"].as<std::string>());
     }
+
+    if (use_missing_file)
+    {
+        x_missing_filename = virtual_map["file"].as<std::string>() + "_x_missing.table";
+        y_missing_filename = virtual_map["file"].as<std::string>() + "_y_missing.table";
+    }
     // vector<string> covar = {"X31.0.0","X1160.0.0", "X1200.0.0", "X1289.0.0",
     //                         "PC1", "PC2", "PC3", "PC4", "PC5"};
     Matrix<double, Dynamic, Dynamic> Theta;
     int d = covar.size();
+    double quality_score = 1;
     Theta.setZero(d+1, d+1);
-    Matrix<double, Dynamic, Dynamic> Theta_0 = Read_matrix_table(cov_yy_filename, covar);
+    Matrix<double, Dynamic, Dynamic> Theta_0 = Read_matrix_table(cov_yy_filename, covar, y_missing_filename, use_missing_file, quality_score);
+
 
     Theta(0,0) = Theta_0(0,0);
     Theta.block(0,2,1,d-1) = Theta_0.block(0,1,1,d-1);
     Theta.block(2,0,d-1,1) = Theta_0.block(1,0,d-1,1);
     Theta.block(2,2,d-1,d-1) = Theta_0.block(1,1,d-1,d-1);
 
-    cal_summary_and_save(cov_xy_filename, var_x_filename, meta_filename, result_filename, Theta, covar, n);
+    cal_summary_and_save(cov_xy_filename, var_x_filename, meta_filename, result_filename, x_missing_filename, y_missing_filename, Theta, covar, n, c, quality_score, use_missing_file, use_missing_rate_estim);
     end = clock();
     double endtime=(double)(end-start)/CLOCKS_PER_SEC;
     std::cout << "Completed in " << endtime << " seconds." << endl;
@@ -402,5 +517,5 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-// .\main.exe --file test_data/sam --phe X31.0.0 --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 --out test_data/test
+// .\main.exe --file test_data/sam_10M --phe X31.0.0 --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 --out test_data/test --overall-non-missing-rate 1 --use-missing-rate-file --use-missing-rate-estimate
 // .\main.exe --file UKB_R/136_1k --phe X102.0.0 --covar X21001.0.0,X1488.0.0,X24021.0.0,PC1,PC2,PC3,PC4,PC5 --out UKB_R/C_imp_res

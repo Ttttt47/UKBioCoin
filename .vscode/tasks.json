@@ -18,7 +18,6 @@
                 "D:\\software\\cpplibs\\boost_1_81_0\\boost_1_81_0",
                 "-L",
                 "D:\\software\\cpplibs\\boost_1_81_0\\boost_1_81_0\\stage\\lib",
-
                 "D:\\software\\cpplibs\\boost_1_81_0\\boost_1_81_0\\stage\\lib\\libboost_program_options-mgw12-mt-x64-1_81.a"
             ],
             "options": {
@@ -32,7 +31,7 @@
                 "isDefault": true
             },
             "detail": "调试器生成的任务。"
-        }
+        },
     ],
     "version": "2.0.0"
 }
