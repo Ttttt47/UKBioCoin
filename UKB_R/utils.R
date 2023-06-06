@@ -1,6 +1,6 @@
 
-
-write.table(c(rep(0,20),1-t$missing_rate), file=glue('/public3/project_users/chengb/hjc/projects/UKBioCoin/0422/2.matrix/10M_y_missing.table'))
+ms = data.frame(missing=meta$missing_rate, col.names = c(paste0('X',meta$FieldID,'.0.0')))
+write.table(meta$missing_rate, row.names = c(paste0('X',meta$FieldID,'.0.0')), file=glue('/public3/project_users/chengb/hjc/projects/UKBioCoin/0422/2.matrix/10M_y_missing.table'))
 write.table(x_missing, file=glue('/public3/project_users/chengb/hjc/projects/UKBioCoin/0422/2.matrix/10M_x_missing.table'))
 
 # create sam for testing

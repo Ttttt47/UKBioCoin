@@ -49,6 +49,8 @@ fwrite(cov_xy[1:2,],file='/public3/project_users/chengb/hjc/projects/UKBioCoin/m
 # edit the header manually and run
 fwrite(cov_xy,file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_xy.table',sep=' ',na='NA',row.names = T, col.names = F, append=T , nThread=16)
 
+fwrite(cov_xy,file="/public3/project_users/chengb/hjc/projects/UKBioCoin/0525/2.matrix/10M_cov_xy.table",sep=' ',na='NA',row.names = T, col.names = F, append=T , nThread=10)
+
 # fwrite(cov_yy,file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_yy.table',sep=' ',na='NA',row.names = T, col.names = T)
 # write.table(cov_xy, file='./matrix/14M_cov_xy.table', row.names = T, col.names = T, sep = ' ')
 write.table(cov_yy, file='/public3/project_users/chengb/hjc/projects/UKBioCoin/matrix/14M_cov_yy.table', row.names = T, col.names = T, sep = ' ')
