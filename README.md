@@ -1,6 +1,19 @@
 # UKBioCoin
 
-This project is currently developling...
+UKBioCoin (UKC) is a computational device that enables GWAS for UKB but does not rely on UKB original data.
+
+Previously, UKB genotype files (ukb_geno), UKB phenotype files (ukb_phe), and UKB covariate files (ukb_cov) are needed to run
+```
+plink --bfile ukb_geno --phe ukb_phe --cov ukc_cov 2 --out out1
+plink --bfile ukb_geno --phe ukb_phe --cov ukb_cov 1 --out out2
+plink --bfile ukb_geno --phe ukb_phe --cov ukb_cov 1 2 --out out1_2
+```
+Now, you don't need these three files but still have the flexibility to build your own UKB model with UKBioCoin! 
+
+Obviously, these outputs can be integrated into the routines for GWAS, polygenic genetic score, Mendelian randomization, and SNP-heritability estimation.
+
+As UKC is developed on summary statistics and advanced programming technique, it is about 100 times faster than the GWAS on the original UKBioBank data.
+
 
 Examples can be found in `./test_data`
 
@@ -28,7 +41,7 @@ tar -I 'zstd -v' -xvf 14M_15.tar.zst
 ```
 
 
-## Running UKBiocoin in command line
+## Running UKBioCoin in command line
 Here is an example using UKBioCoin in command line.
 ```{bash}
 UKBioCoin --file test_data/sam \ 
@@ -45,7 +58,7 @@ UKBioCoin --file test_data/sam \
 
 `--out`: Specifies the output file prefix. In this example, it is set to `test_data/test`. The output files will have this prefix with `_results.table` ended, namely, `test_data/test_results.table`.
 
-`--size`: Sample size of the regression, default is 270000(0.9 times 300000, the sample size of our releasing data.)
+`--size`: Sample size of the regression, default is 270000 (0.9 times 300000, an approximation of the sample size of the used UKB data.)
 
 ## Output format
 The regression results file is typically a tabular format that presents the estimated coefficients and their associated statistical information for every SNPs, the ordering of the results are the same with the input NSS files.
@@ -69,7 +82,7 @@ for example:
 `-log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient, which measures the statistical significance of each predictor variable. The more negative the value, the more significant the variable is.
 
 
-# How to use UKBioCoin with your own dataset
+# How to build a `UKBioCoin' device with your own dataset
 UKBioCoin uses Naive Summary Statistics as input, which includes files with the same prefix and three different suffixes: `_cov_xy.table`, `_cov_yy.table`, and `_var_x`.table. For example, `sam_cov_xy.table`, `sam_cov_yy.table`, and `sam_var_x.table`. These three files represent the covariance matrix between SNPs and phenotypes, the covariance matrix of phenotypes, and the covariance matrix of var_x.
 
 ## Input Formats as Naive Summary Statistics for UKBioCoin
