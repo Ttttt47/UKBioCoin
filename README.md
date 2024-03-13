@@ -48,7 +48,7 @@ UKBioCoin --file test_data/sam \
             --phe X31.0.0 \
             --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 \
             --out test_data/test \
-            --totalsize 270000 \
+            --totalsize 292216 \
             --use-missing-rate-estimate 
 ```
 -`--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
