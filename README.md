@@ -37,7 +37,7 @@ docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full:v1.3
 
 The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
 ```
-tar -I 'zstd -v' -xvf 14M_15.tar.zst
+tar -I 'zstd -v' -xvf 10M_0107_15.tar.zst
 ```
 
 To pull the image containing only the UKBioCoin algorithm, use:
