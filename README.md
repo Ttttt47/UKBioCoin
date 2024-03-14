@@ -29,15 +29,21 @@ docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
 swr.cn-east-3.myhuaweicloud.com
 ```
 
-Then pull the image using:
+Then pull the full image containing the UKBioCoin algorithm and the UKB NSS data using:
 
 ```
-docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin:v6
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full:v1.3
 ```
 
 The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
 ```
 tar -I 'zstd -v' -xvf 14M_15.tar.zst
+```
+
+To pull the image containing only the UKBioCoin algorithm, use:
+
+```bash
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_none:v1.3
 ```
 
 
@@ -51,7 +57,7 @@ UKBioCoin --file test_data/sam \
             --totalsize 292216 \
             --use-missing-rate-estimate 
 ```
--`--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
+- `--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
 
 - `--phe`: Specifies the phenotype to be analyzed. In this example, it is set to `X31.0.0`.
 
