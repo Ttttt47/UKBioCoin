@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -20,35 +19,39 @@ using namespace boost::program_options;
 
 
 
-Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta, int n)
+double cal_VIF(Matrix<double, Dynamic, Dynamic> Omega)
+{   
+    // cal_VIF is used to calculate the variance inflation factor of the estimated parameters.
+    // Omega is the estimated covariance matrix of the parameters.
+    int d = Omega.rows();
+    double R_2 = (Omega.row(0).segment(1,d-1) * Omega.block(1,1,d-1,d-1).inverse() * Omega.col(0).segment(1,d-1)).value()/Omega(0,0);
+    double VIF = 1/(1-R_2);
+    return(VIF);
+}
+
+Vector<double, Dynamic> cal_summary(Matrix<double, Dynamic, Dynamic> Theta, Matrix<double, Dynamic, Dynamic> D_inv, int n)
 {   
     int d = Theta.rows();
-    Matrix<double, Dynamic, Dynamic> Omega = n * Theta.block(1,1,d-1,d-1);
-    Matrix<double, Dynamic, Dynamic> Lambda = Omega.diagonal().asDiagonal();
-    Matrix<double, Dynamic, Dynamic> b = Theta.block(1,0,d-1,1).array() / (Theta.block(1,1,d-1,d-1)).diagonal().array();
-    
-    Matrix<double, Dynamic, Dynamic> rv_Omega = Omega.inverse();
-    Matrix<double, Dynamic, Dynamic> beta = rv_Omega * Lambda * b;
-    Matrix<double, Dynamic, Dynamic> temp = (n - (beta.transpose() * Omega * beta).array())/(n-(d-2)-1);
-    Matrix<double, Dynamic, Dynamic> var_beta = temp(0,0) * rv_Omega;
-    
-    // beta and SE.
-    Vector<double, Dynamic> t_stats = beta.array() / var_beta.diagonal().array().sqrt().array();
-    Vector<double, Dynamic> log_p_val;
-    Vector<double, Dynamic> p_val;
-    Vector<double, Dynamic> log10_p_val;
+    Matrix<double, Dynamic, Dynamic> Omega = Theta.block(1,1,d-1,d-1);
+    Matrix<double, Dynamic, Dynamic> Omega_inv = Omega;
+    // calculate the inverse of Omega by inverting the truncked matrix & D_inv.
+    double q = 1/(Omega(0,0) - (Omega.block(0,1,1,d-2) * D_inv * Omega.block(1,0,d-2,1)).value());
+    Omega_inv(0,0) = q;
+    Omega_inv.block(0,1,1,d-2) = -q * Omega.block(0,1,1,d-2) * D_inv;
+    Omega_inv.block(1,0,d-2,1) = -q * D_inv * Omega.block(1,0,d-2,1);
+    Omega_inv.block(1,1,d-2,d-2) =  D_inv + q * D_inv * Omega.block(1,0,d-2,1) * Omega.block(0,1,1,d-2) * D_inv;
 
-    log_p_val.setZero(t_stats.size());
-    log10_p_val = log_p_val;
-    for (int i = 0; i < t_stats.size(); i++)
-    {   
-        log_p_val[i] = cdf_t_log(-abs(t_stats[i]), n-2) + log(2);
-        log10_p_val[i] = log_p_val[i] * log10(exp(1));
-    }
-    
+    Vector<double, Dynamic> a = Theta.block(0,1,1,d-1).transpose();
+    Vector<double, Dynamic> theta = Omega_inv * a;
 
-    Vector<double, 4> summary = {beta(0,0), sqrt(var_beta.diagonal()(0,0)),
-                                 t_stats[0], -log10_p_val[0]};
+    double rss = n * (1 - (theta.transpose() * a).value())/(n-(d-2)-1);
+    double var_beta = rss * Omega_inv(0,0) / n;
+    double t_stat = theta[0] / sqrt(var_beta);
+    double log_p_val = cdf_t_log(-abs(t_stat), n-2) + log(2);
+    double log10_p_val = log_p_val * log10(exp(1));
+    double VIF = var_beta / (rss/((n-1)*Theta(1,1)));
+
+    Vector<double, 5> summary = {theta[0], sqrt(var_beta), t_stat, -log10_p_val, VIF};
     return(summary);
 }
 
@@ -115,20 +118,16 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
         
         while(getline(fin_miss, line_miss))
         {
-            //cout << line_miss << endl;
+
             istringstream iline(line_miss);
             iline >> word;
             word = word.substr(1,word.size()-2);
             for (int i = 0; i < length_covar; i++)
             {   
-                //cout << word << endl;
-                //cout << colnames[i] << endl;
                 if (word == colnames[i])
                 {   
                     iline >> word;
-                    //cout << word << endl;
                     non_missing_rate = non_missing_rate*(1-std::stod(word));
-                    //cout << non_missing_rate << endl;
                     break;
                 }
             }
@@ -171,7 +170,6 @@ Matrix<double, Dynamic, Dynamic> Read_matrix_table(string filename, vector<strin
         }
         line_id ++;
     }
-
     return(Theta);
 }
 
@@ -261,7 +259,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
     {
         fout << word_meta << ' ';
     }
-    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "-log10_P" << ' ' << "nobs" << ' ' << "Quality-Score" << '\n';
+    fout << "BETA" << ' ' << "SE" << ' ' << "T-STAT" << ' ' << "-log10_P" << ' ' << "VIF" << ' ' << "nobs" << ' ' << "Quality-Score" << '\n';
     while(getline(fin, line) && getline(fin_x, line_x) && getline(fin_meta, line_meta))
     {   
         
@@ -283,7 +281,7 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         iline_x >> word_x;  // ignore first colunm.
 
         word_id = 0;
-
+        // std::cout << Theta.row(1) << endl;
         while (iline >> word)
         {   
             for (int i = 0; i < covar_id.size(); i++)
@@ -315,10 +313,6 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
             el = std::stod(word_x);
         }
         Theta(1,1) = el;
-        // std::cout << Theta.row(0) << endl;
-        // std::cout << Theta.row(1) << endl;
-        // calculating summary data 
-        // Vector<double, Dynamic> s;
         int size;
         if (use_missing_rate_estim)
         {   
@@ -328,16 +322,19 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         {
             size = floor(n*c);
         }
+        int d=Theta.rows();
 
-        Vector<double, 4> summary = cal_summary(Theta, size);
-
-
+        Matrix<double, Dynamic, Dynamic> D_inv = Theta.block(2,2,d-2,d-2).inverse();
+        Vector<double, 5> summary = cal_summary(Theta, D_inv, size);
+        
+        // double VIF = cal_VIF(Theta.block(1,1,d-1,d-1)); // depriciated methods for calculating VIF.
+        // double VIF = 0;
         if (use_missing_rate_estim)
         {
-            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << size << ' ' << quality_score*(1-c1) << '\n';
+            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << summary[4] << ' ' << ' ' << size << ' ' << quality_score*(1-c1) << '\n';
         }else
         {
-            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << size << ' ' << c << '\n';
+            fout << summary[0] << ' ' << summary[1] << ' ' << summary[2] << ' ' << summary[3] << ' ' << summary[4] << ' ' << ' ' << size << ' ' << c << '\n';
         }
         
         // writing results to table.
@@ -486,8 +483,7 @@ int main(int argc, char const *argv[])
         x_missing_filename = virtual_map["file"].as<std::string>() + "_x_missing.table";
         y_missing_filename = virtual_map["file"].as<std::string>() + "_y_missing.table";
     }
-    // vector<string> covar = {"X31.0.0","X1160.0.0", "X1200.0.0", "X1289.0.0",
-    //                         "PC1", "PC2", "PC3", "PC4", "PC5"};
+
     Matrix<double, Dynamic, Dynamic> Theta;
     int d = covar.size();
     double quality_score = 1;
