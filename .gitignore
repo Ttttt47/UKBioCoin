@@ -1,8 +1,5 @@
 .vscode/*
 *.json
-.vscode/settings.json
 main.exe
 .Rproj.user
-UKB_R/136_cov_yy.table
-UKB_R/136_var_x.table
-UKB_R/136_cov_xy.table
+
