@@ -222,3 +222,6 @@ For example:
 "3" 0.082
 ...
 ```
+
+# License
+This project is covered under the GNU General Public License v2.0.
