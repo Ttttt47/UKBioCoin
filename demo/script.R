@@ -20,13 +20,13 @@ cat_header = function(){
 command = matrix(c("pfile","pf",2,"character", "PLINK2 binary genotype table, specify at least this option or --bfile as the genotype input",
                    "bfile","bf",2,"character", "PLINK1.9 binary genotype table, specify at least this option or --pfile as the genotype input",
                    "pheno","p",1,"character","ID of donor parental line",
-                   "sample","s",2,"character","a text file with IID column to specify the applied samples in UKC",
                    "novisualize","v",2,"logical","by default, figures used to evaluate UKC results against the general results based on individual-level data is generated, specify this option to turn off this behaviour",
                    "nonormalize","n",2,"logical","by default, UKC will normalized the input phenotypes by mean 0 and sd 1, specify this option to turn off this behaviour. WARNING: Un-normalized phenotype would lead to bad NSS, this option should not be specified in most cases",
                    "threads","t",2,"numeric","Specify to set threads for PLINK, defaulted 4",
                    "memory","m",2,"numeric","Specify to set memory limits for PLINK, in MB, defaulted 8000",
                    "prefix","pr",2,"character","prefix of the generated NSS, defaulted UKC",
                    "ukc","ue",2,"character","full directory of UKC excutable, otherwise the scrip would try UKBioCoin",
+                   "out", 'o',2,"character", "output directory",
                    "help","h",0,"logical", "parameters input instruction"),
                  byrow=T,ncol=5)
 args = getopt(spec = command)
@@ -41,11 +41,11 @@ if (!is.null(args$help) || (is.null(args$pfile) & is.null(args$bfile)) || is.nul
 pheno = args$pheno
 ukc = 'UKBioCoin'
 prefix = 'UKC'
-sample_file = NULL
 novisualize = FALSE
 nonormalize = FALSE
 threads = 4
 memory = 8000
+out = getwd()
 
 if(is.null(args$pfile)){
   file = args$bfile
@@ -53,9 +53,6 @@ if(is.null(args$pfile)){
 } else {
   file = args$pfile
   plink_header = "plink2 --pfile "
-}
-if (!is.null(args$sample)) {
-  sample_file = args$sample
 }
 if (!is.null(args$novisualize)) {
   novisualize = TRUE
@@ -75,15 +72,19 @@ if (!is.null(args$prefix)) {
 if (!is.null(args$ukc)) {
   ukc = args$ukc
 }
-
+if (!is.null(args$out)) {
+  out = args$out
+}
 cat_header()
 if(is.null(args$pfile)){
-  cat(paste0("Options: \n  --bfile ",file," \n  --pheno ",pheno," \n  --sample ",sample_file," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
+  sample_size = nrow(fread(paste0(file,".fam")))
+  cat(paste0("Options: \n  --bfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
 } else {
-  cat(paste0("Options: \n  --pfile ",file," \n  --pheno ",pheno," \n  --sample ",sample_file," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
+  sample_size = nrow(fread(paste0(file,".psam"))) - 1
+  cat(paste0("Options: \n  --pfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
 }
 
-out = getwd()
+
 if(!dir.exists(out)) dir.create(out)
 setwd(out)
 if(!dir.exists('./0.basic')) dir.create('./0.basic')
@@ -129,7 +130,7 @@ if(!nonormalize){
 }
 
 # setting up the directory
-setwd(out)
+# setwd(out)
 if(!dir.exists('./1.plink_temp')) dir.create('./1.plink_temp')
 
 # run the script in command line
@@ -153,7 +154,7 @@ TIME = TIME+time
 cat(paste0("Generating PLINK statistics done. Elapsed time: ", time, " minute.\n\n"))
 
 
-setwd(out)
+# setwd(out)
 if(!dir.exists('./2.matrix')) dir.create('./2.matrix')
 time1 = proc.time()
 # phenotype file
@@ -176,14 +177,8 @@ for (i in 1:length(phes)){
 }
 
 scaled_pheno = fread(pheno)
+scaled_pheno = data.frame(scaled_pheno)[,phes]
 
-# if sample_selected is not NA
-if (!is.null(args$sample)){
-  sample_selected = fread(sample_file, header = T, nThread = threads)
-  scaled_pheno = data.frame(scaled_pheno)[which(scaled_pheno$IID %in% sample_selected$IID),phes]
-}else {
-  scaled_pheno = data.frame(scaled_pheno)[,phes]
-}
 
 if(!nonormalize){
   scaled_pheno = apply(scaled_pheno,2,scale)
@@ -236,12 +231,13 @@ time = time["elapsed"]
 TIME = TIME+time
 cat(paste0("Generating NSS done. Elapsed time: ", time, " minute.\n\n"))
 
+
 if(!novisualize){
-  setwd(out)
+  # setwd(out)
   if(!dir.exists('./3.analysis')) dir.create('./3.analysis')
   time1 = proc.time()
   # test UKC
-  UKC_command = paste0(paste0(ukc,' --file 2.matrix/', prefix, ' --phe ', phes[1], ' --use-missing-rate-file --use-missing-rate-estimate --totalsize ', nrow(scaled_pheno), ' --out 3.analysis/test.', phes[1]))
+  UKC_command = paste0(paste0(ukc,' --file 2.matrix/', prefix, ' --phe ', phes[1], ' --use-missing-rate-file --use-missing-rate-estimate --totalsize ', sample_size, ' --out 3.analysis/test.', phes[1]))
   cat(UKC_command)
   system(UKC_command)
   
@@ -249,12 +245,13 @@ if(!novisualize){
   dt1 = fread(res.file,nThread = threads, header = T, data.table = F)
   dt2 = fread(paste0("1.plink_temp/single_reg.",phes[1],".glm.linear"),nThread = threads, header = T, data.table = F)
   
-  if(length(which(dt1$REF_FREQ==0.5))>0){
-    dt1 = dt1[-which(dt1$REF_FREQ==0.5),]
+  ambiguous_ids = unique(c(which(dt1$REF_FREQ==0.5), which(dt2$A1_FREQ==0.5)))
+  if (length(ambiguous_ids) > 0){
+    cat(paste0("Warning: ", length(ambiguous_ids), " ambiguous SNPs found, removing them.\n"))
+    dt1 = dt1[-ambiguous_ids,]
+    dt2 = dt2[-ambiguous_ids,]
   }
-  if(length(which(dt2$A1_FREQ==0.5))>0){
-    dt2 = dt2[-which(dt2$A1_FREQ==0.5),]
-  }
+
   #dt1$BETA = ifelse(dt1$Effect_Allele==dt2$A1, dt1$BETA, ifelse(dt1$REF_FREQ==0.5, dt1$BETA, -1*dt1$BETA))
   dt1$BETA = ifelse(dt1$Effect_Allele==dt2$A1, dt1$BETA, -1*dt1$BETA)
   dt1 = dt1[,c('ID','BETA','SE','T-STAT','-log10_P')]
