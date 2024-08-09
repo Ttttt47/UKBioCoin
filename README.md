@@ -72,7 +72,7 @@ UKBioCoin --file test_data/sam \
 
 **PS**: Additionally, you can also set the following parameter to estimate the sample size instead of using `--use-missing-rate-estimate`.
 
-- `--overall-non-missing-rate`: The overall non-missing rate of the data. If `--use-missing-rate-estimate` is set to false, the sample size will be set to the value of `--totalsize` times value of parameter `--overall-non-missing-rate` (default is 0.9).
+- `--overall-non-missing-rate`: The overall non-missing rate of the data. If `--use-missing-rate-estimate` isn't specified, the sample size will be set to the value of `--totalsize` times value of parameter `--overall-non-missing-rate` (default is 0.9).
 
 ## Output format
 The regression results file is typically a tabular format that presents the estimated coefficients and their associated statistical information for every SNPs, the ordering of the results are the same with the input NSS files.
@@ -95,7 +95,7 @@ The first 7 columns is the same with the input meta file (`xxx_meta.table`) desc
 
 - `T-STAT`: This column contains the t-statistic values for each coefficient, which indicate the strength of the evidence against the null hypothesis that the true coefficient is zero.
 
-- `-log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient, which measures the statistical significance of each predictor variable. The more negative the value, the more significant the variable is.
+- `-log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient, which measures the statistical significance of each predictor variable. The more postive the value, the more significant the variable is.
 
 - `nobs`: This column contains the estimated number of observations used in the regression.
 
