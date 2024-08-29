@@ -325,6 +325,12 @@ void cal_summary_and_save(string cov_xy_filename, string var_x_filename, string 
         int d=Theta.rows();
 
         Matrix<double, Dynamic, Dynamic> D_inv = Theta.block(2,2,d-2,d-2).inverse();
+        // check if D is invertible. if not, then the calculation will be halt.
+        if (D_inv.hasNaN())
+        {
+            std::cout << "Sigularity detected in the covariance matrix, please check if the covariates are linearly dependent." << endl;
+            exit(-1);
+        }
         Vector<double, 5> summary = cal_summary(Theta, D_inv, size);
         
         // double VIF = cal_VIF(Theta.block(1,1,d-1,d-1)); // depriciated methods for calculating VIF.

@@ -17,16 +17,15 @@ cat_header = function(){
   cat("###################################################\n\n")
 }
 
-command = matrix(c("pfile","pf",2,"character", "PLINK2 binary genotype table, specify at least this option or --bfile as the genotype input",
-                   "bfile","bf",2,"character", "PLINK1.9 binary genotype table, specify at least this option or --pfile as the genotype input",
-                   "pheno","p",1,"character","ID of donor parental line",
+command = matrix(c("pfile","pf",2,"character", "path to PLINK2 genotype data, specify at least this option or --bfile as the genotype input",
+                   "bfile","bf",2,"character", "path to PLINK1.9 genotype data, specify at least this option or --pfile as the genotype input",
+                   "pheno","p",2,"character","path to phenotype data",
                    "novisualize","v",2,"logical","by default, figures used to evaluate UKC results against the general results based on individual-level data is generated, specify this option to turn off this behaviour",
-                   "nonormalize","n",2,"logical","by default, UKC will normalized the input phenotypes by mean 0 and sd 1, specify this option to turn off this behaviour. WARNING: Un-normalized phenotype would lead to bad NSS, this option should not be specified in most cases",
                    "threads","t",2,"numeric","Specify to set threads for PLINK, defaulted 4",
                    "memory","m",2,"numeric","Specify to set memory limits for PLINK, in MB, defaulted 8000",
                    "prefix","pr",2,"character","prefix of the generated NSS, defaulted UKC",
                    "ukc","ue",2,"character","full directory of UKC excutable, otherwise the scrip would try UKBioCoin",
-                   "out", 'o',2,"character", "output directory",
+                   "out", 'o',2,"character", "output directory, if not specified, the current directory will be used",
                    "help","h",0,"logical", "parameters input instruction"),
                  byrow=T,ncol=5)
 args = getopt(spec = command)
@@ -38,27 +37,25 @@ if (!is.null(args$help) || (is.null(args$pfile) & is.null(args$bfile)) || is.nul
 }
 
 # grab arguements
-pheno = args$pheno
+pheno = normalizePath(args$pheno)
 ukc = 'UKBioCoin'
 prefix = 'UKC'
 novisualize = FALSE
-nonormalize = FALSE
 threads = 4
 memory = 8000
 out = getwd()
 
 if(is.null(args$pfile)){
-  file = args$bfile
+  file = normalizePath(paste0(args$bfile,'.fam'))
+  file = strtrim(file, nchar(file)-4)
   plink_header = "plink2 --bfile "
 } else {
-  file = args$pfile
+  file = normalizePath(paste0(args$pfile,'.psam'))
+  file = strtrim(file, nchar(file)-5)
   plink_header = "plink2 --pfile "
 }
 if (!is.null(args$novisualize)) {
   novisualize = TRUE
-}
-if (!is.null(args$nonormalize)) {
-  nonormalize = TRUE
 }
 if (!is.null(args$threads)) {
   threads = args$threads
@@ -73,15 +70,17 @@ if (!is.null(args$ukc)) {
   ukc = args$ukc
 }
 if (!is.null(args$out)) {
-  out = args$out
+  out = normalizePath(args$out)
 }
 cat_header()
 if(is.null(args$pfile)){
-  sample_size = nrow(fread(paste0(file,".fam")))
-  cat(paste0("Options: \n  --bfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
+  sample_file = fread(paste0(file,".fam"), data.table = F)
+  sample_size = nrow(sample_file)
+  cat(paste0("Options: \n  --bfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
 } else {
-  sample_size = nrow(fread(paste0(file,".psam"))) - 1
-  cat(paste0("Options: \n  --pfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --nonormalized ", nonormalize, " \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
+  sample_file = fread(paste0(file,".psam"), data.table = F)
+  sample_size = nrow(sample_file)
+  cat(paste0("Options: \n  --pfile ",file," \n  --pheno ",pheno," \n  --threads ",threads," \n  --memory ", memory," \n  --novisualize ",novisualize," \n  --prefix ", prefix, " \n  --ukc ", ukc, "\n\n"))
 }
 
 
@@ -120,14 +119,20 @@ TIME = TIME+time
 cat(paste0("Generating basic statistics done. Elapsed time: ", time, " minute.\n\n"))
 
 # generating plink temp
-phe_names = paste0(colnames(fread(pheno, header = T, nrows = 1, nThread = threads))[-c(1,2)], collapse = ',')
 phes = colnames(fread(pheno, header = T, nrows = 1, nThread=threads))[-c(1,2)]
 pheDT = fread(pheno, header = T, data.table = F)
-if(!nonormalize){
-  pheDT[,phes] = apply(pheDT[,phes],2,scale)
-  write.table(pheDT,paste0(pheno,".scaled"),quote=F,col.names = T,row.names = F)
-  pheno = paste0(pheno,".scaled")
-}
+pheDT = pheDT[which(pheDT$IID %in% sample_file[,2]), ]
+
+# deleting cols with NA values > 80%
+cat(paste0("Deleting phenotypes with missing rate > 80% ...\n\n"))
+pheDT = pheDT[, apply(pheDT, 2, function(y) mean(is.na(y))<0.8)]
+phes = colnames(pheDT)[-c(1,2)]
+phe_names = paste0(phes, collapse = ',')
+
+# normalizing phenotypes
+pheDT[,phes] = apply(pheDT[, phes],2,scale)
+write.table(pheDT,paste0("scaled_pheno.table"),quote=F,col.names = T,row.names = F)
+pheno = paste0("scaled_pheno.table")
 
 # setting up the directory
 # setwd(out)
@@ -176,13 +181,7 @@ for (i in 1:length(phes)){
   cov_xy[,i] = cov_xy_slice
 }
 
-scaled_pheno = fread(pheno)
-scaled_pheno = data.frame(scaled_pheno)[,phes]
-
-
-if(!nonormalize){
-  scaled_pheno = apply(scaled_pheno,2,scale)
-}
+scaled_pheno = fread(pheno, data.table = F)[, phes]
 
 colnames(cov_xy) = phes
 cov_yy = cov(scaled_pheno,use='pairwise')
@@ -262,6 +261,7 @@ if(!novisualize){
   colnames(dt2) = c('SNP','UKB_BETA','UKB_SE','UKB_TSTAT','UKB_P')
   
   dt = merge(dt1,dt2,'SNP')
+  dt = dt[sample(c(1:nrow(dt)),min(10000,nrow(dt))),]
   png(paste0("3.analysis/Validation.", phes[1],".png"),width = 16*300, height = 16*300,res = 300)
   par(mfrow=c(2,2))
   plot(dt$UKB_BETA, dt$UKC_BETA, xlab = "UKB_BETA", ylab = "UKC_BETA", 
@@ -291,9 +291,9 @@ if(!novisualize){
   ypos = usr[3] + 0.8 * (usr[4] - usr[3])
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_TSTAT, dt$UKC_TSTAT),digits = 2)))
   
-  plot(dt$UKB_P, dt$UKC_P, xlab = "UKB_P", ylab = "UKC_P", 
-       xlim = 1.05*c(min(dt$UKB_P),max(dt$UKB_P)),
-       ylim = 1.05*c(min(dt$UKC_P),max(dt$UKC_P)))
+  plot(-log(dt$UKB_P, 10), -log(dt$UKC_P,10), xlab = "-log10(UKB_P)", ylab = "-log10(UKC_P)", 
+       xlim = 1.05*c(min(-log(dt$UKB_P, 10)),max(-log(dt$UKB_P, 10))),
+       ylim = 1.05*c(min(-log(dt$UKC_P,10)),max(-log(dt$UKC_P,10))))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
