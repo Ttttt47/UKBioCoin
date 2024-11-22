@@ -65,7 +65,7 @@ UKBioCoin --file test_data/sam \
 
 - `--out`: Specifies the output file prefix. In this example, it is set to `test_data/test`. The output files will have this prefix with `_results.table` ended, namely, `test_data/test_results.table`.
 
-- `--totalsize`: Total sample size of the regression, default is 292216 (sample size of the used UKB data.)
+- `--totalsize`: Total sample size of the regression, default is 292216 (sample size of our working UKB data.)
 
 - `--use-missing-rate-estimate`: Whether use missing_rate files to estimate sample size. If so, the software will try to find missing rates file `xxx_x_missing.table` and `xxx_y_missing.table` and use them to estimate the sample size.
 
