@@ -261,6 +261,8 @@ if(!novisualize){
   colnames(dt2) = c('SNP','UKB_BETA','UKB_SE','UKB_TSTAT','UKB_P')
   
   dt = merge(dt1,dt2,'SNP')
+  #   excluding NAs
+  dt = dt[!is.na(dt$UKB_BETA) & !is.na(dt$UKC_BETA) & !is.na(dt$UKB_SE) & !is.na(dt$UKC_SE) & !is.na(dt$UKB_TSTAT) & !is.na(dt$UKC_TSTAT) & !is.na(dt$UKB_P) & !is.na(dt$UKC_P),]
   dt = dt[sample(c(1:nrow(dt)),min(10000,nrow(dt))),]
   png(paste0("3.analysis/Validation.", phes[1],".png"),width = 16*300, height = 16*300,res = 300)
   par(mfrow=c(2,2))
