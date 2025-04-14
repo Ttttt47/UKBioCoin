@@ -263,12 +263,13 @@ if(!novisualize){
   dt = merge(dt1,dt2,'SNP')
   #   excluding NAs
   dt = dt[!is.na(dt$UKB_BETA) & !is.na(dt$UKC_BETA) & !is.na(dt$UKB_SE) & !is.na(dt$UKC_SE) & !is.na(dt$UKB_TSTAT) & !is.na(dt$UKC_TSTAT) & !is.na(dt$UKB_P) & !is.na(dt$UKC_P),]
+  dt[,-1] = sapply(dt[,-1], function(x) as.numeric(x))
   dt = dt[sample(c(1:nrow(dt)),min(10000,nrow(dt))),]
-  png(paste0("3.analysis/Validation.", phes[1],".png"),width = 16*300, height = 16*300,res = 300)
+  png(paste0("3.analysis/Validation.", phes[i],".png"),width = 16*300, height = 16*300,res = 300)
   par(mfrow=c(2,2))
   plot(dt$UKB_BETA, dt$UKC_BETA, xlab = "UKB_BETA", ylab = "UKC_BETA", 
-       xlim = 1.05*c(min(dt$UKB_BETA),max(dt$UKB_BETA)),
-       ylim = 1.05*c(min(dt$UKC_BETA),max(dt$UKC_BETA)))
+       xlim = 1.05*c(max(min(dt$UKB_BETA),-100),min(max(dt$UKB_BETA)),100),
+       ylim = 1.05*c(max(min(dt$UKC_BETA),-100),min(max(dt$UKC_BETA)),100))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
@@ -276,8 +277,8 @@ if(!novisualize){
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_BETA, dt$UKC_BETA),digits = 2)))
   
   plot(dt$UKB_SE, dt$UKC_SE, xlab = "UKB_SE", ylab = "UKC_SE", 
-       xlim = 1.05*c(min(dt$UKB_SE),max(dt$UKB_SE)),
-       ylim = 1.05*c(min(dt$UKC_SE),max(dt$UKC_SE)))
+       xlim = 1.05*c(max(min(dt$UKB_SE),0),min(max(dt$UKB_SE)),100),
+       ylim = 1.05*c(max(min(dt$UKC_SE),0),min(max(dt$UKC_SE)),100))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
@@ -285,17 +286,17 @@ if(!novisualize){
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_SE, dt$UKC_SE),digits = 2)))
   
   plot(dt$UKB_TSTAT, dt$UKC_TSTAT, xlab = "UKB_TSTAT", ylab = "UKC_TSTAT", 
-       xlim = 1.05*c(min(dt$UKB_TSTAT),max(dt$UKB_TSTAT)),
-       ylim = 1.05*c(min(dt$UKC_TSTAT),max(dt$UKC_TSTAT)))
+       xlim = 1.05*c(max(min(dt$UKB_TSTAT),-100),min(max(dt$UKB_TSTAT)),100),
+       ylim = 1.05*c(max(min(dt$UKC_TSTAT),-100),min(max(dt$UKC_TSTAT)),100))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
   ypos = usr[3] + 0.8 * (usr[4] - usr[3])
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_TSTAT, dt$UKC_TSTAT),digits = 2)))
   
-  plot(-log(dt$UKB_P, 10), -log(dt$UKC_P,10), xlab = "-log10(UKB_P)", ylab = "-log10(UKC_P)", 
-       xlim = 1.05*c(min(-log(dt$UKB_P, 10)),max(-log(dt$UKB_P, 10))),
-       ylim = 1.05*c(min(-log(dt$UKC_P,10)),max(-log(dt$UKC_P,10))))
+  plot(-log(dt$c, 10), -log(dt$UKC_P,10), xlab = "-log10(UKB_P)", ylab = "-log10(UKC_P)", 
+       xlim = 1.05*c(max(min(-log(dt$UKB_P, 10)),0),min(max(-log(dt$UKB_P, 10)),100)),
+       ylim = 1.05*c(max(min(-log(dt$UKC_P, 10)),0),min(max(-log(dt$UKC_P, 10)),100)))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
