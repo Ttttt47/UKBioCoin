@@ -268,8 +268,8 @@ if(!novisualize){
   png(paste0("3.analysis/Validation.", phes[i],".png"),width = 16*300, height = 16*300,res = 300)
   par(mfrow=c(2,2))
   plot(dt$UKB_BETA, dt$UKC_BETA, xlab = "UKB_BETA", ylab = "UKC_BETA", 
-       xlim = 1.05*c(max(min(dt$UKB_BETA),-100),min(max(dt$UKB_BETA)),100),
-       ylim = 1.05*c(max(min(dt$UKC_BETA),-100),min(max(dt$UKC_BETA)),100))
+       xlim = 1.05*c(max(min(dt$UKB_BETA),-100),min(max(dt$UKB_BETA),100)),
+       ylim = 1.05*c(max(min(dt$UKC_BETA),-100),min(max(dt$UKC_BETA),100)))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
@@ -277,8 +277,8 @@ if(!novisualize){
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_BETA, dt$UKC_BETA),digits = 2)))
   
   plot(dt$UKB_SE, dt$UKC_SE, xlab = "UKB_SE", ylab = "UKC_SE", 
-       xlim = 1.05*c(max(min(dt$UKB_SE),0),min(max(dt$UKB_SE)),100),
-       ylim = 1.05*c(max(min(dt$UKC_SE),0),min(max(dt$UKC_SE)),100))
+       xlim = 1.05*c(max(min(dt$UKB_SE),0),min(max(dt$UKB_SE),100)),
+       ylim = 1.05*c(max(min(dt$UKC_SE),0),min(max(dt$UKC_SE),100)))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
@@ -286,8 +286,8 @@ if(!novisualize){
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_SE, dt$UKC_SE),digits = 2)))
   
   plot(dt$UKB_TSTAT, dt$UKC_TSTAT, xlab = "UKB_TSTAT", ylab = "UKC_TSTAT", 
-       xlim = 1.05*c(max(min(dt$UKB_TSTAT),-100),min(max(dt$UKB_TSTAT)),100),
-       ylim = 1.05*c(max(min(dt$UKC_TSTAT),-100),min(max(dt$UKC_TSTAT)),100))
+       xlim = 1.05*c(max(min(dt$UKB_TSTAT),-100),min(max(dt$UKB_TSTAT),100)),
+       ylim = 1.05*c(max(min(dt$UKC_TSTAT),-100),min(max(dt$UKC_TSTAT),100)))
   abline(a = 0, b = 1, col = 'red')
   usr = par("usr")
   xpos = usr[1] + 0.2 * (usr[2] - usr[1])
