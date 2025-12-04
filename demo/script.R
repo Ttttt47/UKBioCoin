@@ -142,8 +142,8 @@ if(!dir.exists('./1.plink_temp')) dir.create('./1.plink_temp')
 time1 = proc.time()
 plink_command = paste0(plink_header, 
                        file,
-                       '--no-input-missing-phenotype --glm allow-no-covars skip-invalid-pheno --out ./1.plink_temp/single_reg --pheno ', 
-                       pheno, ' --pheno-name ', 
+                       ' --glm allow-no-covars skip-invalid-pheno --out ./1.plink_temp/single_reg --pheno ', 
+                       pheno, ' --pheno-name  --no-input-missing-phenotype', 
                        phe_names, ' --threads ', 
                        threads, ' --memory ', 
                        memory, ' --read-freq ./0.basic/0.freq.afreq')
