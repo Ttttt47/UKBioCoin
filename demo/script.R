@@ -142,7 +142,7 @@ if(!dir.exists('./1.plink_temp')) dir.create('./1.plink_temp')
 time1 = proc.time()
 plink_command = paste0(plink_header, 
                        file,
-                       ' --silent --glm allow-no-covars skip-invalid-pheno --out ./1.plink_temp/single_reg --pheno ', 
+                       '--no-input-missing-phenotype --glm allow-no-covars skip-invalid-pheno --out ./1.plink_temp/single_reg --pheno ', 
                        pheno, ' --pheno-name ', 
                        phe_names, ' --threads ', 
                        threads, ' --memory ', 
@@ -294,7 +294,7 @@ if(!novisualize){
   ypos = usr[3] + 0.8 * (usr[4] - usr[3])
   text(xpos, ypos, labels = paste0("Cor = ",round(cor(dt$UKB_TSTAT, dt$UKC_TSTAT),digits = 2)))
   
-  plot(-log(dt$c, 10), -log(dt$UKC_P,10), xlab = "-log10(UKB_P)", ylab = "-log10(UKC_P)", 
+  plot(-log(dt$UKB_P, 10), -log(dt$UKC_P,10), xlab = "-log10(UKB_P)", ylab = "-log10(UKC_P)", 
        xlim = 1.05*c(max(min(-log(dt$UKB_P, 10)),0),min(max(-log(dt$UKB_P, 10)),100)),
        ylim = 1.05*c(max(min(-log(dt$UKC_P, 10)),0),min(max(-log(dt$UKC_P, 10)),100)))
   abline(a = 0, b = 1, col = 'red')
