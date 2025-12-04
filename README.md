@@ -15,10 +15,17 @@ Obviously, these outputs can be integrated into the routines for GWAS, polygenic
 As UKC is developed on summary statistics and advanced programming technique, it is about 100 times faster than the GWAS on the original UKBioBank data.
 
 
-Examples can be found in `./demo`
+Examples can be found in `./demo`.
+
+
+
 
 # How to use UKBioCoin within docker images
+
 We have packed the UKBioCoin algorithm with the NSS calculated from UKBioBank data into a seamless docker image for convenient use. 
+
+
+
 Description of all the phenotype included in our data is given in `./description of phenotype0422.csv` in the respotory. We also provide the first 20 PC as covarites, use them as `PC{n}` with `{n}` replaced with integer ranging from 1 to 20 in the commandline. If you are using phenotype with FieldID `34`, replace it with `X34.0.0` in the commandline calling UKBioCoin algorithm.
 
 To use the image, you should first log in to the repository using:
@@ -223,5 +230,10 @@ For example:
 ...
 ```
 
+# Access statement
+The NSS provided with UKC consist solely of summary statistics (SNP–phenotype and SNP–PC covariances, phenotype covariance matrices, variances, and missingness rates) and contain no individual-level UK Biobank data. They comply with UKB’s policy on derived summary statistics and are therefore made openly accessible for all users.
+
 # License
 This project is covered under the GNU General Public License v2.0.
+
+
