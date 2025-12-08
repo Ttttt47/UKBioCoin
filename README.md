@@ -15,20 +15,21 @@ Obviously, these outputs can be integrated into the routines for GWAS, polygenic
 As UKC is developed on summary statistics and advanced programming technique, it is about 100 times faster than the GWAS on the original UKBioBank data.
 
 
-Examples can be found in `./demo`.
+A step-by-step example can be found in `./demo`.
 
 
 
 
 # How to use UKBioCoin within docker images
 
-We have packed the UKBioCoin algorithm with the NSS calculated from UKBioBank data into a seamless docker image for convenient use. 
+We provide prebuilt Docker images that package the UKBioCoin computational engine together with the Naive Summary Statistics (NSS) generated from UK Biobank (UKB) and Westlake Biobank for Chinese (WBBC). These images allow users to run covariate-adjustable GWAS without direct access to individual-level data.
 
+A full description of all UKB phenotypes included in the NSS is available in the file `Description of phenotype.xlsx` in this repository. We also provide the first 20 UKC principal components (accessible as `PC{n}`, where `n` ranges from 1–20) and the first 20 UKB PCs (`ukbPC{n}`). When specifying phenotypes/covariates, a UKB Field ID 34 should be written as X34.0.0 when used in the command line. 
 
+For WBBC, the included NSS cover height, sex, age, and the first five principal components. When specifying WBBC phenotypes or covariates in UKBioCoin, simply use:
+`height`, `sex`, `age`, and `PC1–PC5`.
 
-Description of all the phenotype included in our data is given in `./description of phenotype0422.csv` in the respotory. We also provide the first 20 PC as covarites, use them as `PC{n}` with `{n}` replaced with integer ranging from 1 to 20 in the commandline. If you are using phenotype with FieldID `34`, replace it with `X34.0.0` in the commandline calling UKBioCoin algorithm.
-
-To use the image, you should first log in to the repository using:
+To use the images, you should first log in to the repository using:
 
 ```
 docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
@@ -36,15 +37,15 @@ docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
 swr.cn-east-3.myhuaweicloud.com
 ```
 
-Then pull the full image containing the UKBioCoin algorithm and the UKB NSS data using:
+Then pull the full image containing the UKBioCoin algorithm and the NSS data using:
 
 ```
-docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full:v1.3
+docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full:v1.3_sc02_wbbc
 ```
 
-The data and the software are stored in /UKB. Note that the NSS data are compressed. You should first decompress them using:
+The software is stored in `/UKB` and the NSS is stored in `/NSS`. Note that the NSS data are compressed. You should first decompress them using:
 ```
-tar -I 'zstd -v' -xvf 10M_0107_15.tar.zst
+tar -I 'zstd -v' -xvf XXX.tar.zst
 ```
 
 To pull the image containing only the UKBioCoin algorithm, use:
@@ -111,7 +112,7 @@ The first 7 columns is the same with the input meta file (`xxx_meta.table`) desc
 
 
 
-# How to build a `UKBioCoin' device with your own dataset
+# How to build a UKBioCoin device with your own dataset
 
 ## Building UKC excutable `UKBioCoin`
 
