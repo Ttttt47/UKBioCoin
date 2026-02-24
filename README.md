@@ -36,7 +36,6 @@ docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
 3f70cdbb9813cc57ad3a4b08de08217bcd5575ba09daef2b41b6388f0f336bc1 \
 swr.cn-east-3.myhuaweicloud.com
 ```
-Please note that this account is a dedicated, read-only credential provided solely for pulling the images; it does not have any permission to modify, upload, or delete files in the repository.
 
 Then pull the full image containing the UKBioCoin algorithm and the NSS data using:
 
@@ -54,7 +53,14 @@ To pull the image containing only the UKBioCoin algorithm, use:
 ```bash
 docker pull swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_none:v1.3
 ```
+## Security Note
+The provided Docker login credentials are for a dedicated, read-only account created specifically for distribution. This account has no permission to modify or delete any repository content.
 
+To ensure the exact version of the environment and NSS data used in our manuscript is reproducible, we provide the immutable image digest below. Users can pull this specific version to guarantee content integrity, as the digest will change if any part of the image is modified:
+
+```
+swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full@sha256:9ac4148b6ec997d312fb4d56918bde36c3cef473146fbcc307f3fd3457aa3f47
+```
 
 ## Running UKBioCoin in command line
 Here is an example using UKBioCoin in command line.
