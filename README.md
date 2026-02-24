@@ -29,13 +29,14 @@ A full description of all UKB phenotypes included in the NSS is available in the
 For WBBC, the included NSS cover height, sex, age, and the first five principal components. When specifying WBBC phenotypes or covariates in UKBioCoin, simply use:
 `height`, `sex`, `age`, and `PC1–PC5`.
 
-To use the images, you should first log in to the repository using:
+To use the images, you should first log in to the repository using the command and accout below. 
 
 ```
 docker login -u cn-east-3@CFB4B8RZY5ZZ5RYWIHRI -p \
 3f70cdbb9813cc57ad3a4b08de08217bcd5575ba09daef2b41b6388f0f336bc1 \
 swr.cn-east-3.myhuaweicloud.com
 ```
+Please note that this account is a dedicated, read-only credential provided solely for pulling the images; it does not have any permission to modify, upload, or delete files in the repository.
 
 Then pull the full image containing the UKBioCoin algorithm and the NSS data using:
 
