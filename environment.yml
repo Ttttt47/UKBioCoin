@@ -1,0 +1,14 @@
+name: ukbiocoin-dev
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - boost-cpp=1.85
+  - cmake>=3.28
+  - cxx-compiler
+  - ninja
+  - plink2=2.0.0a.6.9
+  - python>=3.11
+  - r-base=4.5
+  - r-data.table
+  - r-getopt

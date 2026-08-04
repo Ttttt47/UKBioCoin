@@ -3,6 +3,8 @@
 #include<string.h>
 #include<ostream>
 #include<iomanip>
+#include<climits>
+#include<iostream>
 
 /*
  * All of this code has been taken from the R Core library with
@@ -5088,7 +5090,7 @@ double qchisq(double p, double df, int lower_tail, int log_p)
 #define R_D_qIv(p)	(log_p	? exp(p) : (p))		/*  p  in qF(p,..) */
 
 double tanpi(double x) {
-    return tanpi(x);
+    return tan(M_PI * x);
 }
 
 
@@ -5358,6 +5360,4 @@ double quantile_chisq(double p, double df, int lower_tail){
 
 
 //////////////////////////////////////////////////////////////////////////////
-
-
 

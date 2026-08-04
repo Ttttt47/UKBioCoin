@@ -24,6 +24,8 @@ A step-by-step example can be found in `./demo`.
 
 We provide prebuilt Docker images that package the UKBioCoin computational engine together with the Naive Summary Statistics (NSS) generated from UK Biobank (UKB) and Westlake Biobank for Chinese (WBBC). These images allow users to run covariate-adjustable GWAS without direct access to individual-level data.
 
+> **Docker compatibility notice:** The Docker images listed below have not yet been updated to the latest UKC core. They do not support `--threads`, and a covariate must be supplied with `--covar`. The multithreaded and no-covariate examples in this README apply only to a core built from the current source code.
+
 A full description of all UKB phenotypes included in the NSS is available in the file `Description of phenotype.xlsx` in this repository. We also provide the first 20 UKC principal components (accessible as `PC{n}`, where `n` ranges from 1–20) and the first 20 UKB PCs (`ukbPC{n}`). When specifying phenotypes/covariates, a UKB Field ID 34 should be written as X34.0.0 when used in the command line. 
 
 For WBBC, the included NSS cover height, sex, age, and the first five principal components. When specifying WBBC phenotypes or covariates in UKBioCoin, simply use:
@@ -62,7 +64,10 @@ To ensure the exact version of the environment and NSS data used in our manuscri
 swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full@sha256:9ac4148b6ec997d312fb4d56918bde36c3cef473146fbcc307f3fd3457aa3f47
 ```
 
-## Running UKBioCoin in command line
+## Running the updated UKBioCoin core in command line
+
+The commands in this section require UKBioCoin to be built from the current source code; they are not supported by the Docker images above.
+
 Here is an example using UKBioCoin in command line.
 ```{bash}
 UKBioCoin --file test_data/sam \ 
@@ -70,6 +75,7 @@ UKBioCoin --file test_data/sam \
             --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 \
             --out test_data/test \
             --totalsize 292216 \
+            --threads 16 \
             --use-missing-rate-estimate 
 ```
 - `--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
@@ -83,6 +89,18 @@ UKBioCoin --file test_data/sam \
 - `--totalsize`: Total sample size of the regression, default is 292216 (sample size of our working UKB data.)
 
 - `--use-missing-rate-estimate`: Whether use missing_rate files to estimate sample size. If so, the software will try to find missing rates file `xxx_x_missing.table` and `xxx_y_missing.table` and use them to estimate the sample size.
+
+- `--threads`: Number of worker threads used for parsing and regression. The default is `1`, which preserves the resource usage of earlier releases. Results are written in input order and are deterministic across thread counts.
+
+To run a regression without covariates, omit `--covar`:
+
+```bash
+UKBioCoin --file test_data/sam \
+            --phe X31.0.0 \
+            --out test_data/test.no_covar \
+            --totalsize 292216 \
+            --threads 16
+```
 
 
 **PS**: Additionally, you can also set the following parameter to estimate the sample size instead of using `--use-missing-rate-estimate`.
@@ -123,41 +141,29 @@ The first 7 columns is the same with the input meta file (`xxx_meta.table`) desc
 
 ## Building UKC excutable `UKBioCoin`
 
-If you are intend to build a UKBioCoin device with your own dataset, you should first build UKC excutable `UKBioCoin`. Beside using the docker image mentioned above, you can also build the UKBioCoin excutable from the source code `main.cpp`. 
+To use the latest UKC core, build the `UKBioCoin` executable from the current source code.
 
-The UKBioCoin excutable depends on the following libraries:
-- Eigen
-- Boost
-- cpp_cdfs (already included in `tools` folder)
+### Reproducible development environment
 
-### Eigen
-
-Eigen is a C++ template library for linear algebra. It provides a wide range of matrix and vector operations, making it useful for various numerical computations.
-
-To install Eigen, you can follow these steps:
-
-1. Download the latest stable release of [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page#Download).
-2. Extract the downloaded archive.
-3. Copy the `Eigen` directory to a location where your compiler can find it. For example, you can copy it to `/usr/local/include`.
-
-### Boost
-
-Boost is a collection of peer-reviewed C++ libraries that provide support for various tasks and functionalities, such as string manipulation, file system operations, and more.
-
-To install Boost, you can use the following commands:
+The supplied environment includes R, the R packages used by `demo/script.R`, PLINK2, Boost, CMake, Ninja, and a C++ compiler. Eigen is intentionally not duplicated and is supplied to CMake as an include path.
 
 ```bash
-
-sudo apt-get install libboost-all-dev
-    
+mamba env create -f environment.yml
+mamba activate ukbiocoin-dev
 ```
 
-### Building UKBioCoin
-To build UKBioCoin, make sure you have installed Eigen, Boost, and a C++ compiler that supports C++11. Also, make sure that `tools` is in the same directory with `main.cpp`. You can use the following commands:
+### Building and testing UKBioCoin
+
+UKBioCoin requires C++14. Configure it with the local Eigen installation, then build and run the lightweight regression tests:
 
 ```bash
-g++ -std=c++11 main.cpp -I "/path-to-eigen-X.X.X/" -lboost_program_options -o UKBioCoin 
+cmake -S . -B build -G Ninja \
+  -DEIGEN3_INCLUDE_DIR=/home/jingcheng/fsl/include/eigen3
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
+
+The executable is written to `build/UKBioCoin`.
 
 ## Generating Naive Summary Statistics (NSS) for UKBioCoin
 
@@ -243,5 +249,3 @@ The NSS provided with UKC consist solely of summary statistics (SNP–phenotype 
 
 # License
 This project is covered under the GNU General Public License v2.0.
-
-
