@@ -90,7 +90,7 @@ UKBioCoin --file test_data/sam.nss \
 
 - `--use-missing-rate-estimate`: Uses x/y missing-rate arrays to estimate per-SNP sample size. For NSS v2, both optional arrays must be declared in the manifest; for legacy NSS, UKC reads `xxx_x_missing.table` and `xxx_y_missing.table`.
 
-- `--threads`: Number of worker threads used for parsing and regression. The default is `1`, which preserves the resource usage of earlier releases. Results are written in input order and are deterministic across thread counts.
+- `--threads`: Number of worker threads used for parsing, regression, and result formatting. The default is `1`, which preserves the resource usage of earlier releases. Results are written in input order and are deterministic across thread counts.
 
 - `--io-mode`: `stream` (default) reads the selected vectors in fixed-size blocks and has bounded memory use. `memory` loads only the requested phenotype/covariate vectors and shared arrays before computation, then reports loading, computation, and writing time separately.
 
@@ -110,6 +110,8 @@ UKBioCoin --file test_data/sam.nss \
 
 ## Output format
 The regression results file is typically a tabular format that presents the estimated coefficients and their associated statistical information for every SNPs, the ordering of the results are the same with the input NSS files.
+
+Result rows are formatted in parallel into bounded per-batch buffers and then written sequentially, preserving the historical table bytes, metadata, numeric precision, and input order. The timing summary reports formatting and file-writing time separately while retaining the combined `result writing` value.
 
 for example:
 ```

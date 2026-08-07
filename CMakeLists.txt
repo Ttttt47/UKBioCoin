@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(UKC_ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
-find_package(Boost REQUIRED COMPONENTS filesystem json program_options)
+find_package(Boost REQUIRED COMPONENTS charconv filesystem json program_options)
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 
 set(EIGEN3_INCLUDE_DIR "" CACHE PATH "Directory containing Eigen/Dense")
@@ -36,6 +36,7 @@ target_include_directories(UKBioCoin PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${EIGEN3_INCLUDE_DIR}")
 target_link_libraries(UKBioCoin PRIVATE
+    Boost::charconv
     Boost::program_options
     ukbiocoin_nss
     OpenMP::OpenMP_CXX)

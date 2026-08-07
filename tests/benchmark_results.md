@@ -48,6 +48,28 @@ selected so the legacy parser had to traverse the full text row.
 All v2 stream/memory and 1/16-thread result files were byte-identical. Wide v2
 COVxy occupied `25.72%` of the legacy text COVxy size.
 
+## Buffered text-output benchmark
+
+Tested on 2026-08-08 after replacing per-value iostream insertion with bounded
+batch buffers, Boost.Charconv numeric formatting, and ordered bulk writes. The
+output remains the historical `_results.table` format. A synthetic NSS with
+1,000,000 variants and 64 phenotypes selected one phenotype and seven
+covariates. Values below are medians of three runs; every optimized output was
+byte-identical to the pre-optimization executable.
+
+| Implementation | Threads | Total | Result writing | Output speedup | Total speedup |
+|---|---:|---:|---:|---:|---:|
+| Previous iostream | 1 | 2.099 s | 1.045 s | 1.00x | 1.00x |
+| Buffered/charconv | 1 | 1.302 s | 0.254 s | 4.11x | 1.61x |
+| Previous iostream | 8 | 1.341 s | 1.022 s | 1.00x | 1.00x |
+| Buffered/charconv | 8 | 0.670 s | 0.236 s | 4.33x | 2.00x |
+
+The result table was 86.6 MiB. A second test with 4,000,000 variants produced a
+352.6 MiB table: 8-thread result writing fell from 4.037 s to 1.012 s (3.99x),
+and total time fell from 5.523 s to 2.891 s (1.91x). The optimized stream output
+used 6.0 MiB peak RSS. The optimized memory and stream modes produced
+byte-identical results; memory mode used 981.7 MiB peak RSS.
+
 ## Automated checks
 
 Regular CTest and the AddressSanitizer/UndefinedBehaviorSanitizer build passed.

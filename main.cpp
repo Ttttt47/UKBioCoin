@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -28,6 +29,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <boost/charconv.hpp>
 #include <boost/program_options.hpp>
 
 #include "nss_v2.hpp"
@@ -58,6 +60,8 @@ struct Timings {
     double static_data = 0.0;
     double loading = 0.0;
     double compute = 0.0;
+    double output_formatting = 0.0;
+    double output_io = 0.0;
     double output = 0.0;
     double total = 0.0;
 };
@@ -532,16 +536,101 @@ void compute_numeric_batch(const vector<vector<double>> &cov_xy,
     }
 }
 
+bool append_double(string &output, double value) {
+    char buffer[128];
+    const auto converted = boost::charconv::to_chars(
+        buffer, buffer + sizeof(buffer), value,
+        boost::charconv::chars_format::general, 6);
+    if (converted.ec != std::errc()) return false;
+    output.append(buffer, converted.ptr);
+    return true;
+}
+
+bool append_integer(string &output, int value) {
+    char buffer[32];
+    const auto converted = boost::charconv::to_chars(
+        buffer, buffer + sizeof(buffer), value);
+    if (converted.ec != std::errc()) return false;
+    output.append(buffer, converted.ptr);
+    return true;
+}
+
 void write_result_rows(std::ofstream &output, const vector<string> &metadata,
-                       const vector<RowResult> &results, size_t &invalid_rows) {
-    for (size_t i = 0; i < results.size(); ++i) {
-        if (!results[i].error.empty()) throw UkcError(results[i].error);
-        if (results[i].invalid) ++invalid_rows;
-        output << metadata[i] << ' ' << results[i].summary[0] << ' '
-               << results[i].summary[1] << ' ' << results[i].summary[2] << ' '
-               << results[i].summary[3] << ' ' << results[i].summary[4] << ' '
-               << ' ' << results[i].sample_size << ' '
-               << results[i].quality_score << '\n';
+                       const vector<RowResult> &results, size_t &invalid_rows,
+                       int threads, double &formatting_seconds,
+                       double &io_seconds) {
+    if (metadata.size() != results.size()) {
+        throw UkcError("Internal output row-count mismatch");
+    }
+    constexpr size_t output_batch_size = 32768;
+    for (size_t batch_start = 0; batch_start < results.size();
+         batch_start += output_batch_size) {
+        const size_t requested_end = batch_start + output_batch_size;
+        const size_t batch_end = requested_end < results.size()
+            ? requested_end : results.size();
+        const auto format_start = Clock::now();
+        for (size_t i = batch_start; i < batch_end; ++i) {
+            if (!results[i].error.empty()) throw UkcError(results[i].error);
+            if (results[i].invalid) ++invalid_rows;
+        }
+
+        const int available_rows = static_cast<int>(batch_end - batch_start);
+        const int workers = threads < available_rows ? threads : available_rows;
+        vector<string> buffers(static_cast<size_t>(workers));
+        vector<unsigned char> errors(static_cast<size_t>(workers), 0);
+#ifdef _OPENMP
+#pragma omp parallel num_threads(workers)
+#endif
+        {
+#ifdef _OPENMP
+            const int worker = omp_get_thread_num();
+#else
+            const int worker = 0;
+#endif
+            const size_t begin = batch_start +
+                (batch_end - batch_start) * static_cast<size_t>(worker) /
+                static_cast<size_t>(workers);
+            const size_t end = batch_start +
+                (batch_end - batch_start) * static_cast<size_t>(worker + 1) /
+                static_cast<size_t>(workers);
+            string &buffer = buffers[static_cast<size_t>(worker)];
+            size_t reserve = (end - begin) * 112;
+            for (size_t i = begin; i < end; ++i) reserve += metadata[i].size();
+            buffer.reserve(reserve);
+            for (size_t i = begin; i < end; ++i) {
+                buffer.append(metadata[i]);
+                for (double value : results[i].summary) {
+                    buffer.push_back(' ');
+                    if (!append_double(buffer, value)) {
+                        errors[static_cast<size_t>(worker)] = 1;
+                        break;
+                    }
+                }
+                if (errors[static_cast<size_t>(worker)] != 0) break;
+                buffer.append("  ");
+                if (!append_integer(buffer, results[i].sample_size)) {
+                    errors[static_cast<size_t>(worker)] = 1;
+                    break;
+                }
+                buffer.push_back(' ');
+                if (!append_double(buffer, results[i].quality_score)) {
+                    errors[static_cast<size_t>(worker)] = 1;
+                    break;
+                }
+                buffer.push_back('\n');
+            }
+        }
+        for (unsigned char error : errors) {
+            if (error != 0) throw UkcError("Error formatting regression result");
+        }
+        formatting_seconds += elapsed_seconds(format_start);
+
+        const auto write_start = Clock::now();
+        for (const string &buffer : buffers) {
+            output.write(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        }
+        if (!output) throw UkcError("Error writing regression results");
+        io_seconds += elapsed_seconds(write_start);
     }
 }
 
@@ -617,6 +706,8 @@ void report_timings(const Timings &timings, const string &io_mode) {
               << (io_mode == "memory" ? "  data loading:         " : "  data reading:         ")
               << timings.loading << '\n'
               << "  computation:          " << timings.compute << '\n'
+              << "  result formatting:    " << timings.output_formatting << '\n'
+              << "  result file writing:  " << timings.output_io << '\n'
               << "  result writing:       " << timings.output << '\n'
               << "  total:                " << timings.total << '\n'
               << "Peak RSS: " << static_cast<double>(ukc::peak_rss_kib()) / 1024.0 << " MiB\n"
@@ -722,7 +813,8 @@ void run_v2(const string &directory, const string &result_filename,
                               threads);
         timings.compute += elapsed_seconds(compute_start);
         const auto output_start = Clock::now();
-        write_result_rows(output, metadata, results, invalid_rows);
+        write_result_rows(output, metadata, results, invalid_rows, threads,
+                          timings.output_formatting, timings.output_io);
         timings.output += elapsed_seconds(output_start);
         progress.finish();
     } else {
@@ -758,7 +850,8 @@ void run_v2(const string &directory, const string &result_filename,
                                   use_missing, threads);
             timings.compute += elapsed_seconds(compute_start);
             const auto output_start = Clock::now();
-            write_result_rows(output, metadata, results, invalid_rows);
+            write_result_rows(output, metadata, results, invalid_rows, threads,
+                              timings.output_formatting, timings.output_io);
             timings.output += elapsed_seconds(output_start);
             completed += count;
             progress.update(completed);
@@ -768,7 +861,9 @@ void run_v2(const string &directory, const string &result_filename,
 
     const auto commit_start = Clock::now();
     output_file.commit();
-    timings.output += elapsed_seconds(commit_start);
+    const double commit_seconds = elapsed_seconds(commit_start);
+    timings.output += commit_seconds;
+    timings.output_io += commit_seconds;
     timings.total = elapsed_seconds(total_start);
     if (invalid_rows != 0) {
         std::cerr << "Warning: " << invalid_rows
@@ -904,7 +999,8 @@ void run_v1(const string &prefix, const string &result_filename,
         vector<string> metadata(batch.size());
         for (size_t i = 0; i < batch.size(); ++i) metadata[i] = std::move(batch[i].meta);
         const auto output_start = Clock::now();
-        write_result_rows(output, metadata, results, invalid_rows);
+        write_result_rows(output, metadata, results, invalid_rows, threads,
+                          timings.output_formatting, timings.output_io);
         timings.output += elapsed_seconds(output_start);
         completed += batch.size();
         progress.update(completed);
@@ -917,7 +1013,9 @@ void run_v1(const string &prefix, const string &result_filename,
     progress.finish();
     const auto commit_start = Clock::now();
     output_file.commit();
-    timings.output += elapsed_seconds(commit_start);
+    const double commit_seconds = elapsed_seconds(commit_start);
+    timings.output += commit_seconds;
+    timings.output_io += commit_seconds;
     timings.total = elapsed_seconds(total_start);
     if (invalid_rows != 0) {
         std::cerr << "Warning: " << invalid_rows

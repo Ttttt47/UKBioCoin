@@ -95,6 +95,14 @@ def main():
         if pathlib.Path(str(no_cov_1) + "_results.table").read_bytes() != \
                 pathlib.Path(str(no_cov_16) + "_results.table").read_bytes():
             raise AssertionError("1-thread and 16-thread no-covariate outputs differ")
+        expected_no_covariate = (
+            "ID A BETA SE T-STAT -log10_P VIF nobs Quality-Score\n"
+            "rs1 A 0.4 0.13633 2.93406 2.3802 0.99  100 1\n"
+            "rs2 C -0.25 0.156911 -1.59326 0.941865 0.99  100 1\n"
+            "rs3 G 0.15 0.224227 0.668965 0.296631 0.99  100 1\n")
+        if pathlib.Path(str(no_cov_1) + "_results.table").read_text() != \
+                expected_no_covariate:
+            raise AssertionError("optimized output formatting changed the legacy table bytes")
         rows = result_rows(no_cov_1)
         if len(rows) != 4:
             raise AssertionError("no-covariate output lost rows")
