@@ -24,7 +24,7 @@ A step-by-step example can be found in `./demo`.
 
 We provide prebuilt Docker images that package the UKBioCoin computational engine together with the Naive Summary Statistics (NSS) generated from UK Biobank (UKB) and Westlake Biobank for Chinese (WBBC). These images allow users to run covariate-adjustable GWAS without direct access to individual-level data.
 
-> **Docker compatibility notice:** The Docker images listed below have not yet been updated to the latest UKC core. They do not support `--threads`, and a covariate must be supplied with `--covar`. The multithreaded and no-covariate examples in this README apply only to a core built from the current source code.
+> **Docker compatibility notice:** The Docker images listed below still contain the old UKC core. They do not support NSS v2, `--io-mode`, or `--threads`, and they require at least one covariate via `--covar`. NSS v2, memory mode, multithreading, and no-covariate analyses require UKC 2.0 built from the current source code.
 
 A full description of all UKB phenotypes included in the NSS is available in the file `Description of phenotype.xlsx` in this repository. We also provide the first 20 UKC principal components (accessible as `PC{n}`, where `n` ranges from 1–20) and the first 20 UKB PCs (`ukbPC{n}`). When specifying phenotypes/covariates, a UKB Field ID 34 should be written as X34.0.0 when used in the command line. 
 
@@ -70,15 +70,15 @@ The commands in this section require UKBioCoin to be built from the current sour
 
 Here is an example using UKBioCoin in command line.
 ```{bash}
-UKBioCoin --file test_data/sam \ 
+UKBioCoin --file test_data/sam.nss \
             --phe X31.0.0 \
             --covar X1160.0.0,X1200.0.0,X1289.0.0,PC1,PC2,PC3,PC4,PC5 \
             --out test_data/test \
-            --totalsize 292216 \
             --threads 16 \
+            --io-mode stream \
             --use-missing-rate-estimate 
 ```
-- `--file`: Specifies the input file prefix. In this example, it is set to `test_data/sam`, the software will then try to find `test_data/sam_cov_xy.table`, `test_data/sam_cov_yy.table`, `test_data/sam_var_x.table` and `test_data/sam_meta.table`.
+- `--file`: Specifies either an NSS v2 directory containing `manifest.json`, or a legacy NSS v1 file prefix. UKC detects the format automatically.
 
 - `--phe`: Specifies the phenotype to be analyzed. In this example, it is set to `X31.0.0`.
 
@@ -86,19 +86,20 @@ UKBioCoin --file test_data/sam \
 
 - `--out`: Specifies the output file prefix. In this example, it is set to `test_data/test`. The output files will have this prefix with `_results.table` ended, namely, `test_data/test_results.table`.
 
-- `--totalsize`: Total sample size of the regression, default is 292216 (sample size of our working UKB data.)
+- `--totalsize`: For NSS v2 this is normally omitted because the base sample size is read from `manifest.json`. If supplied, it must exactly match `dimensions.sample_count`. Legacy NSS v1 retains the historical default of `292216`.
 
-- `--use-missing-rate-estimate`: Whether use missing_rate files to estimate sample size. If so, the software will try to find missing rates file `xxx_x_missing.table` and `xxx_y_missing.table` and use them to estimate the sample size.
+- `--use-missing-rate-estimate`: Uses x/y missing-rate arrays to estimate per-SNP sample size. For NSS v2, both optional arrays must be declared in the manifest; for legacy NSS, UKC reads `xxx_x_missing.table` and `xxx_y_missing.table`.
 
 - `--threads`: Number of worker threads used for parsing and regression. The default is `1`, which preserves the resource usage of earlier releases. Results are written in input order and are deterministic across thread counts.
+
+- `--io-mode`: `stream` (default) reads the selected vectors in fixed-size blocks and has bounded memory use. `memory` loads only the requested phenotype/covariate vectors and shared arrays before computation, then reports loading, computation, and writing time separately.
 
 To run a regression without covariates, omit `--covar`:
 
 ```bash
-UKBioCoin --file test_data/sam \
+UKBioCoin --file test_data/sam.nss \
             --phe X31.0.0 \
             --out test_data/test.no_covar \
-            --totalsize 292216 \
             --threads 16
 ```
 
@@ -145,7 +146,7 @@ To use the latest UKC core, build the `UKBioCoin` executable from the current so
 
 ### Reproducible development environment
 
-The supplied environment includes R, the R packages used by `demo/script.R`, PLINK2, Boost, CMake, Ninja, and a C++ compiler. Eigen is intentionally not duplicated and is supplied to CMake as an include path.
+The supplied environment includes R, the R packages used by `demo/script.R`, NumPy (for interoperability tests), PLINK2, Boost, CMake, Ninja, and a C++ compiler. Eigen is intentionally not duplicated and is supplied to CMake as an include path.
 
 ```bash
 mamba env create -f environment.yml
@@ -163,19 +164,28 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The executable is written to `build/UKBioCoin`.
+The executables are written to `build/UKBioCoin` and `build/UKBioCoinNSSAdapter`.
 
 ## Generating Naive Summary Statistics (NSS) for UKBioCoin
 
-UKBioCoin uses Naive Summary Statistics (NSS) as input, which includes files with the same prefix and three different suffixes: `_meta.table`, `_cov_xy.table`, `_cov_yy.table`, and `_var_x.table`. Additionaly, if you want to estimate the sample size, you should also provide the missing rate files `xxx_x_missing.table` and `xxx_y_missing.table`.
+UKBioCoin 2.0 uses NSS v2 by default. It stores standard little-endian, C-order NumPy arrays and splits COVxy into one float32 vector per phenotype. COVyy, var_x, and missing-rate arrays remain float64. This avoids parsing unrelated phenotype values and substantially reduces COVxy storage. Legacy text NSS v1 remains a supported input format.
 
 We provide a script at `demo/script.R` for you to generate the NSS files from the original PLINK's bfile/pfile and the phenotype(covariates) data. To use this script, you should make sure that you have PLINK/PLINK2 installed in your system and the `plink`/`plink2` command is in your `PATH`.
 
 You may first test the script with the provided demo data at `demo/` folder with the following command:
 
 ```bash
-Rscript script.R --bfile  euro_10Ksnp --pheno euro_10Ksnp.all.phe --threads 2 --memory 8000 --prefix euro_10Ksnp --ukc path-to-UKC-executable
+Rscript script.R \
+  --bfile euro_10Ksnp \
+  --pheno euro_10Ksnp.all.phe \
+  --threads 16 \
+  --memory 8000 \
+  --prefix euro_10Ksnp \
+  --ukc /path/to/UKBioCoin \
+  --novisualize
 ```
+
+The default output is `2.nss/euro_10Ksnp.nss`. Use `--nss-format legacy` to generate the old files under `2.matrix`, and use `--force` only when an existing NSS output should be replaced. The generator obtains the base sample count from the input `.fam` or `.psam`, validates the SNP ID/order across PLINK outputs, and writes each COVxy vector immediately instead of building a complete SNP-by-phenotype matrix in memory.
 
 For more usage of the script, you can use the following command to get the help information:
 
@@ -183,11 +193,47 @@ For more usage of the script, you can use the following command to get the help 
 Rscript script.R --help
 ```
 
-## Input Formats as Naive Summary Statistics for UKBioCoin
+## NSS v2 layout and manifest
+
+An NSS v2 directory has the following layout:
+
+```text
+prefix.nss/
+├── manifest.json
+├── meta.tsv
+├── cov_yy.npy
+├── var_x.npy
+├── x_missing.npy          # optional
+├── y_missing.npy          # optional
+└── cov_xy/
+    ├── 00000000.npy
+    ├── 00000001.npy
+    └── ...
+```
+
+`manifest.json` uses schema `org.ukbiocoin.nss`, schema version `2`, and records `sample_count`, `variant_count`, `phenotype_count`, every dtype/shape/path, and the stable zero-based index and original name of every phenotype. All three dimensions are required positive integers. UKC validates the manifest, all NPY headers and payload sizes, every selected variable, optional missing-rate arrays, and the metadata row count before producing results.
+
+NPY files are uncompressed standard NumPy files. Each COVxy vector has dtype `<f4` and shape `[variant_count]`; COVyy, var_x, x-missing, and y-missing use `<f8`. Missing values are IEEE NaN. The regression itself always computes in double precision.
+
+## Converting legacy NSS v1
+
+The adapter converts an existing text NSS without loading its full COVxy matrix. `--sample-count` is required because this value cannot be inferred from legacy NSS files.
+
+```bash
+UKBioCoinNSSAdapter \
+  --input-prefix /path/to/legacy_prefix \
+  --output /path/to/prefix.nss \
+  --sample-count 292216 \
+  --threads 16
+```
+
+The adapter writes to a temporary directory, validates the completed manifest and all arrays, and atomically renames it. It refuses to overwrite an output unless `--force` is given. Legacy row labels are treated as advisory so files created by older versions with duplicated labels remain convertible; physical row order is preserved and a warning is reported.
+
+## Legacy NSS v1 input formats
 
 You may also generate the NSS files by yourself. The following is the detailed description of the input formats.
 
-## xxx_meta.table
+### xxx_meta.table
 
 For the `xxx_meta.table` format, the first row lists all the metadata fields' names. These metadata are information about the SNPs to be added to the collunms of the result file, So the number of rows of it should be the same with `xxx_var_x.table`(which is equal to the number of SNPs). You can tailor them with your interests.
 
@@ -202,7 +248,7 @@ For example:
 ...
 ```
 
-## xxx_cov_xy.table
+### xxx_cov_xy.table
 
 For the `xxx_cov_xy.table` format, the first row lists all the phenotypes, including principal components, as column names. Each subsequent row represents a single SNP and contains covariances between that SNP and all the phenotypes. The first column in each row is the row number, enclosed in quotes, and the remaining columns contain the covariance values.
 
@@ -216,7 +262,7 @@ For example:
 ...
 ```
 
-## xxx_cov_yy.table
+### xxx_cov_yy.table
 
 For the `xxx_cov_yy.table` format, the first row lists all the phenotypes, including principal components, as column headers. Each subsequent row represents a single phenotype and contains covariance values between that phenotype and itself. The first column in each row lists the name of the phenotype, enclosed in quotes, and the remaining columns contain the covariance values.
 
@@ -231,7 +277,7 @@ For example:
 "PC2" 0.003 0.002 0.004 0.002 0.041
 ```
 
-## xxx_var_x.table
+### xxx_var_x.table
 
 For the `xxx_var_x.table` format, the first row is an arbitrary column name, such as "`var_x`". The second row lists the variance of each SNP, with each row representing a single SNP. The first column in each row is the row number, enclosed in quotes, and the second column contains the variance value.
 

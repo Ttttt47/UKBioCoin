@@ -9,6 +9,8 @@ dependencies:
   - ninja
   - plink2=2.0.0a.6.9
   - python>=3.11
+  - numpy
   - r-base=4.5
   - r-data.table
   - r-getopt
+  - r-jsonlite
