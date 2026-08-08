@@ -19,7 +19,7 @@ set(EIGEN3_INCLUDE_DIR "" CACHE PATH "Directory containing Eigen/Dense")
 if(NOT EIGEN3_INCLUDE_DIR)
     find_path(EIGEN3_INCLUDE_DIR
         NAMES Eigen/Dense
-        HINTS ENV EIGEN3_INCLUDE_DIR /home/jingcheng/fsl/include/eigen3
+        HINTS ENV EIGEN3_INCLUDE_DIR
         PATH_SUFFIXES eigen3)
 endif()
 if(NOT EIGEN3_INCLUDE_DIR)

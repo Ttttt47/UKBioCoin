@@ -157,11 +157,13 @@ mamba activate ukbiocoin-dev
 
 ### Building and testing UKBioCoin
 
-UKBioCoin requires C++14. Configure it with the local Eigen installation, then build and run the lightweight regression tests:
+UKBioCoin requires C++14. If Eigen is installed in a standard system location,
+CMake will find it automatically. Otherwise, provide the directory containing
+`Eigen/Dense` through `EIGEN3_INCLUDE_DIR`:
 
 ```bash
 cmake -S . -B build -G Ninja \
-  -DEIGEN3_INCLUDE_DIR=/home/jingcheng/fsl/include/eigen3
+  -DEIGEN3_INCLUDE_DIR=/path/to/eigen3
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```

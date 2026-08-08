@@ -1,7 +1,7 @@
 # UKC 2.0 acceptance results
 
-Tested on 2026-08-07 with the `ukbiocoin-dev` environment, Eigen from
-`/home/jingcheng/fsl/include/eigen3`, and 16 threads where noted. Wall time and
+Tested on 2026-08-07 with the `ukbiocoin-dev` environment, locally installed
+Eigen headers, and 16 threads where noted. Wall time and
 peak RSS were recorded with GNU `time`; timing values are medians of three runs.
 
 ## Demo (`demo/euro_10Ksnp`)
