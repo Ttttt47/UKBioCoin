@@ -501,7 +501,8 @@ void write_manifest(const std::string &directory, const Manifest &manifest) {
 
 void validate_manifest(const std::string &directory,
                        const Manifest &manifest,
-                       bool validate_all_cov_xy) {
+                       bool validate_all_cov_xy,
+                       bool validate_metadata) {
     if (!directory_exists(directory)) {
         throw NssError(directory + ": NSS v2 directory does not exist");
     }
@@ -528,12 +529,14 @@ void validate_manifest(const std::string &directory,
                                 "cov_xy for '" + phenotype.name + "'");
         }
     }
-    const std::string meta = join_path(directory, manifest.meta_path);
-    const std::uint64_t rows = count_tsv_rows(meta);
-    if (rows != manifest.variant_count) {
-        throw NssError(meta + ": metadata row count " + std::to_string(rows) +
-                       " does not match variant_count " +
-                       std::to_string(manifest.variant_count));
+    if (validate_metadata) {
+        const std::string meta = join_path(directory, manifest.meta_path);
+        const std::uint64_t rows = count_tsv_rows(meta);
+        if (rows != manifest.variant_count) {
+            throw NssError(meta + ": metadata row count " + std::to_string(rows) +
+                           " does not match variant_count " +
+                           std::to_string(manifest.variant_count));
+        }
     }
 }
 
@@ -619,8 +622,39 @@ void write_npy_f64(const std::string &path,
     }
     std::ofstream output(path, std::ios::binary);
     if (!output) throw NssError("Error opening " + path + " for output");
+    write_npy_f64_header(output, shape, path);
+    write_npy_f64_payload(output, values.data(), values.size(), path);
+}
+
+void write_npy_f64_header(std::ofstream &output,
+                          const std::vector<std::uint64_t> &shape,
+                          const std::string &path) {
+    checked_product(shape, path);
     write_npy_prefix(output, "<f8", shape, path);
-    write_little_endian(output, values, path);
+}
+
+void write_npy_f64_payload(std::ofstream &output,
+                           const double *values,
+                           std::size_t count,
+                           const std::string &path) {
+    if (count > static_cast<std::size_t>(
+            (std::numeric_limits<std::streamsize>::max)()) / sizeof(double)) {
+        throw NssError(path + ": NPY payload batch is too large");
+    }
+    if (count != 0 && values == nullptr) {
+        throw NssError(path + ": null NPY payload");
+    }
+    if (host_is_little_endian()) {
+        output.write(reinterpret_cast<const char *>(values),
+                     static_cast<std::streamsize>(count * sizeof(double)));
+    } else {
+        for (std::size_t i = 0; i < count; ++i) {
+            double value = values[i];
+            reverse_bytes(value);
+            output.write(reinterpret_cast<const char *>(&value), sizeof(value));
+        }
+    }
+    if (!output) throw NssError("Error writing NPY payload to " + path);
 }
 
 void create_npy_f32(const std::string &path, std::uint64_t count) {
@@ -640,11 +674,11 @@ std::uint64_t count_tsv_rows(const std::string &path) {
     if (!input) throw NssError("Error opening " + path + " for input");
     std::string line;
     if (!std::getline(input, line) || line.empty()) {
-        throw NssError(path + ": missing metadata header");
+        throw NssError(path + ": missing table header");
     }
     std::uint64_t rows = 0;
     while (std::getline(input, line)) {
-        if (line.empty()) throw NssError(path + ": empty metadata row");
+        if (line.empty()) throw NssError(path + ": empty table row");
         ++rows;
     }
     return rows;

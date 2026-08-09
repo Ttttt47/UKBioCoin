@@ -94,6 +94,10 @@ UKBioCoin --file test_data/sam.nss \
 
 - `--io-mode`: `stream` (default) reads the selected vectors in fixed-size blocks and has bounded memory use. `memory` loads only the requested phenotype/covariate vectors and shared arrays before computation, then reports loading, computation, and writing time separately.
 
+- `--output-format`: Result format, either `table` (default) or `npy`. The `npy`
+  mode writes only the numeric regression results to `<out>_results.npy`; it does
+  not read, validate, or join SNP metadata.
+
 To run a regression without covariates, omit `--covar`:
 
 ```bash
@@ -112,6 +116,42 @@ UKBioCoin --file test_data/sam.nss \
 The regression results file is typically a tabular format that presents the estimated coefficients and their associated statistical information for every SNPs, the ordering of the results are the same with the input NSS files.
 
 Result rows are formatted in parallel into bounded per-batch buffers and then written sequentially, preserving the historical table bytes, metadata, numeric precision, and input order. The timing summary reports formatting and file-writing time separately while retaining the combined `result writing` value.
+
+For faster numeric-only output, use:
+
+```bash
+UKBioCoin --file test_data/sam.nss \
+          --phe X31.0.0 \
+          --out test_data/test.numeric \
+          --threads 16 \
+          --output-format npy
+```
+
+This creates `test_data/test.numeric_results.npy`, a C-order little-endian
+`float64` matrix with shape `(number_of_variants, 7)`. Its columns are, in
+order, `BETA`, `SE`, `T-STAT`, `-log10_P`, `VIF`, `nobs`, and
+`Quality-Score`. No column-name row or variant metadata is stored in this
+array. Invalid numeric result rows retain `NaN` values. Because metadata is not
+accessed in this mode, the input `meta.tsv` or legacy `_meta.table` file may be
+absent.
+
+### Performance recommendation
+
+For a single large analysis whose downstream workflow only needs numeric
+results, prefer `--io-mode stream --output-format npy`. Stream mode reads the
+selected vectors sequentially in bounded batches, while NPY output avoids both
+metadata parsing and floating-point-to-text conversion. This combination keeps
+memory use nearly constant and was the fastest tested configuration.
+
+Use the default `table` output when downstream tools require SNP IDs, alleles,
+positions, or other metadata in the same file. Use `memory` mode only when a
+special workflow benefits from keeping selected vectors resident: in the
+current single-pass engine it usually provides no speed benefit and can consume
+hundreds of MiB or more. In a 4,000,000-variant synthetic benchmark with one
+phenotype, seven covariates, and eight threads, `stream + npy` took 1.238 seconds
+and 4.6 MiB peak RSS, compared with 3.048 seconds for `stream + table` and 2.340
+seconds plus 661 MiB peak RSS for `memory + npy`. Hardware and filesystem
+performance will affect absolute timings.
 
 for example:
 ```
@@ -215,7 +255,7 @@ prefix.nss/
     └── ...
 ```
 
-`manifest.json` uses schema `org.ukbiocoin.nss`, schema version `2`, and records `sample_count`, `variant_count`, `phenotype_count`, every dtype/shape/path, and the stable zero-based index and original name of every phenotype. All three dimensions are required positive integers. UKC validates the manifest, all NPY headers and payload sizes, every selected variable, optional missing-rate arrays, and the metadata row count before producing results.
+`manifest.json` uses schema `org.ukbiocoin.nss`, schema version `2`, and records `sample_count`, `variant_count`, `phenotype_count`, every dtype/shape/path, and the stable zero-based index and original name of every phenotype. All three dimensions are required positive integers. UKC validates the manifest, all NPY headers and payload sizes, every selected variable, and optional missing-rate arrays. The metadata file and its row count are additionally validated for the default table output; numeric-only NPY output does not access it.
 
 NPY files are uncompressed standard NumPy files. Each COVxy vector has dtype `<f4` and shape `[variant_count]`; COVyy, var_x, x-missing, and y-missing use `<f8`. Missing values are IEEE NaN. The regression itself always computes in double precision.
 

@@ -70,11 +70,36 @@ and total time fell from 5.523 s to 2.891 s (1.91x). The optimized stream output
 used 6.0 MiB peak RSS. The optimized memory and stream modes produced
 byte-identical results; memory mode used 981.7 MiB peak RSS.
 
+## Numeric NPY result-output benchmark
+
+Tested on 2026-08-09 with a synthetic NSS v2 containing 4,000,000 variants and
+16 phenotypes. One phenotype and seven covariates were selected. Table and NPY
+runs were alternated to reduce cache and transient-load bias; values are medians
+of three runs in stream mode.
+
+| Format | Threads | Reading | Computation | Result writing | Total | Peak RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| table | 1 | 0.230 s | 3.987 s | 1.406 s | 5.781 s | 6.1 MiB |
+| npy | 1 | 0.092 s | 3.853 s | 0.321 s | 4.274 s | 4.6 MiB |
+| table | 8 | 0.400 s | 0.862 s | 1.614 s | 3.048 s | 4.6 MiB |
+| npy | 8 | 0.187 s | 0.672 s | 0.366 s | 1.238 s | 4.6 MiB |
+
+NPY reduced result-writing time by 4.38x at one thread and 4.41x at eight
+threads. Total time improved by 1.35x and 2.46x, respectively. The numeric NPY
+was 213.6 MiB versus 267.1 MiB for the table because metadata and decimal text
+were omitted. Single- and eight-thread NPY files were byte-identical. Sampled
+rows agreed with the table values within its six-significant-digit text
+precision.
+
+The eight-thread NPY memory mode took a median 2.340 s and 661 MiB peak RSS,
+compared with 1.238 s and 4.6 MiB for stream mode. Loading all selected vectors
+therefore provided no benefit for this single-pass analysis.
+
 ## Automated checks
 
 Regular CTest and the AddressSanitizer/UndefinedBehaviorSanitizer build passed.
 The regression suite covers NumPy interoperability, manifest dimensions and
 sample count, stream/memory and thread determinism, no-covariate computation,
-NA preservation, duplicate legacy row labels, missing files, invalid dtype and
-shape, truncated NPY payloads, singular covariance, row-count mismatch, and
-invalid CLI values.
+numeric result NPY shape/dtype and metadata independence, NA preservation,
+duplicate legacy row labels, missing files, invalid dtype and shape, truncated
+NPY payloads, singular covariance, row-count mismatch, and invalid CLI values.

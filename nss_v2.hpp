@@ -59,7 +59,8 @@ Manifest read_manifest(const std::string &directory);
 void write_manifest(const std::string &directory, const Manifest &manifest);
 void validate_manifest(const std::string &directory,
                        const Manifest &manifest,
-                       bool validate_all_cov_xy = true);
+                       bool validate_all_cov_xy = true,
+                       bool validate_metadata = true);
 
 class NpyReader {
 public:
@@ -83,6 +84,13 @@ void write_npy_f32(const std::string &path, const std::vector<float> &values);
 void write_npy_f64(const std::string &path,
                    const std::vector<double> &values,
                    const std::vector<std::uint64_t> &shape);
+void write_npy_f64_header(std::ofstream &output,
+                          const std::vector<std::uint64_t> &shape,
+                          const std::string &path);
+void write_npy_f64_payload(std::ofstream &output,
+                           const double *values,
+                           std::size_t count,
+                           const std::string &path);
 void create_npy_f32(const std::string &path, std::uint64_t count);
 void append_f32_payload(const std::string &path, const std::vector<float> &values);
 

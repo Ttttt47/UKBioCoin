@@ -45,6 +45,7 @@ using std::vector;
 namespace {
 
 constexpr size_t kBatchSize = 4096;
+constexpr size_t kResultColumnCount = 7;
 using Clock = std::chrono::steady_clock;
 
 class UkcError : public std::runtime_error {
@@ -104,7 +105,7 @@ public:
         : final_path_(final_path),
           temporary_path_(final_path + ".tmp." +
                           std::to_string(static_cast<long long>(::getpid()))),
-          stream_(temporary_path_) {
+          stream_(temporary_path_, std::ios::binary) {
         if (!stream_) throw UkcError("Error opening " + temporary_path_ + " for output");
     }
 
@@ -634,6 +635,41 @@ void write_result_rows(std::ofstream &output, const vector<string> &metadata,
     }
 }
 
+void write_npy_result_rows(std::ofstream &output,
+                           const string &output_path,
+                           const vector<RowResult> &results,
+                           size_t &invalid_rows,
+                           double &preparation_seconds,
+                           double &io_seconds) {
+    constexpr size_t output_batch_size = 32768;
+    for (size_t batch_start = 0; batch_start < results.size();
+         batch_start += output_batch_size) {
+        const size_t requested_end = batch_start + output_batch_size;
+        const size_t batch_end = requested_end < results.size()
+            ? requested_end : results.size();
+        const auto preparation_start = Clock::now();
+        for (size_t i = batch_start; i < batch_end; ++i) {
+            if (!results[i].error.empty()) throw UkcError(results[i].error);
+            if (results[i].invalid) ++invalid_rows;
+        }
+        vector<double> values((batch_end - batch_start) * kResultColumnCount);
+        for (size_t raw = 0; raw < batch_end - batch_start; ++raw) {
+            const size_t source = batch_start + raw;
+            const size_t destination = raw * kResultColumnCount;
+            for (size_t column = 0; column < results[source].summary.size(); ++column) {
+                values[destination + column] = results[source].summary[column];
+            }
+            values[destination + 5] = static_cast<double>(results[source].sample_size);
+            values[destination + 6] = results[source].quality_score;
+        }
+        preparation_seconds += elapsed_seconds(preparation_start);
+
+        const auto write_start = Clock::now();
+        ukc::write_npy_f64_payload(output, values.data(), values.size(), output_path);
+        io_seconds += elapsed_seconds(write_start);
+    }
+}
+
 MatrixXd select_v2_covariance(const ukc::Manifest &manifest,
                               const vector<size_t> &indices,
                               const vector<double> &full) {
@@ -682,9 +718,11 @@ void print_run_summary(const string &format, const string &io_mode,
                        int total_sample_size, const ukc::Manifest *manifest,
                        std::uint64_t variant_count, size_t selected_count,
                        const vector<string> &variables, int threads,
-                       bool use_missing, std::uint64_t estimated_bytes) {
+                       bool use_missing, std::uint64_t estimated_bytes,
+                       const string &output_format) {
     std::cout << "Input format: " << format << '\n'
               << "I/O mode: " << io_mode << '\n'
+              << "Output format: " << output_format << '\n'
               << "Sample count: " << total_sample_size << '\n'
               << "Variants: " << variant_count << '\n';
     if (manifest != nullptr) {
@@ -718,7 +756,7 @@ void run_v2(const string &directory, const string &result_filename,
             const vector<string> &variables, bool total_size_supplied,
             int supplied_total_size,
             double overall_non_missing_rate, bool use_missing,
-            const string &io_mode, int threads) {
+            const string &io_mode, int threads, bool npy_output) {
     const auto total_start = Clock::now();
     Timings timings;
     const auto static_start = Clock::now();
@@ -739,7 +777,7 @@ void run_v2(const string &directory, const string &result_filename,
         fixed_sample_size <= static_cast<int>(variables.size()))) {
         throw UkcError("Effective sample size is too small for the requested model");
     }
-    ukc::validate_manifest(directory, manifest, true);
+    ukc::validate_manifest(directory, manifest, true, !npy_output);
     const vector<size_t> indices = select_v2_variables(manifest, variables);
     ukc::NpyReader cov_reader(ukc::join_path(directory, manifest.cov_yy.path),
                              "<f8", manifest.cov_yy.shape);
@@ -762,15 +800,30 @@ void run_v2(const string &directory, const string &result_filename,
         (io_mode == "memory" ? manifest.variant_count : kBatchSize);
     print_run_summary("NSS v2", io_mode, total_sample_size, &manifest,
                       manifest.variant_count, variables.size(), variables,
-                      threads, use_missing, estimated);
+                      threads, use_missing, estimated,
+                      npy_output ? "npy" : "table");
 
     AtomicOutputFile output_file(result_filename);
     std::ofstream &output = output_file.stream();
     const string meta_path = ukc::join_path(directory, manifest.meta_path);
-    std::ifstream meta = open_input(meta_path);
+    std::ifstream meta;
     string meta_header;
-    if (!std::getline(meta, meta_header)) throw UkcError(meta_path + ": missing header");
-    output << meta_header << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+    const auto header_start = Clock::now();
+    if (npy_output) {
+        ukc::write_npy_f64_header(
+            output, {manifest.variant_count, kResultColumnCount}, result_filename);
+    } else {
+        meta = open_input(meta_path);
+        if (!std::getline(meta, meta_header)) {
+            throw UkcError(meta_path + ": missing header");
+        }
+        output << meta_header
+               << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+        if (!output) throw UkcError("Error writing regression result header");
+    }
+    const double header_seconds = elapsed_seconds(header_start);
+    timings.output += header_seconds;
+    timings.output_io += header_seconds;
     ProgressReporter progress(manifest.variant_count);
     size_t invalid_rows = 0;
 
@@ -797,11 +850,13 @@ void run_v2(const string &directory, const string &result_filename,
         vector<double> x_missing;
         if (x_reader) x_missing = x_reader->read_all();
         vector<string> metadata;
-        metadata.reserve(static_cast<size_t>(manifest.variant_count));
-        string line;
-        while (std::getline(meta, line)) metadata.push_back(std::move(line));
-        if (metadata.size() != manifest.variant_count) {
-            throw UkcError(meta_path + ": metadata row-count mismatch while loading");
+        if (!npy_output) {
+            metadata.reserve(static_cast<size_t>(manifest.variant_count));
+            string line;
+            while (std::getline(meta, line)) metadata.push_back(std::move(line));
+            if (metadata.size() != manifest.variant_count) {
+                throw UkcError(meta_path + ": metadata row-count mismatch while loading");
+            }
         }
         timings.loading += elapsed_seconds(load_start);
 
@@ -813,8 +868,14 @@ void run_v2(const string &directory, const string &result_filename,
                               threads);
         timings.compute += elapsed_seconds(compute_start);
         const auto output_start = Clock::now();
-        write_result_rows(output, metadata, results, invalid_rows, threads,
-                          timings.output_formatting, timings.output_io);
+        if (npy_output) {
+            write_npy_result_rows(output, result_filename, results, invalid_rows,
+                                  timings.output_formatting,
+                                  timings.output_io);
+        } else {
+            write_result_rows(output, metadata, results, invalid_rows, threads,
+                              timings.output_formatting, timings.output_io);
+        }
         timings.output += elapsed_seconds(output_start);
         progress.finish();
     } else {
@@ -834,11 +895,15 @@ void run_v2(const string &directory, const string &result_filename,
                 x_missing.resize(count);
                 x_reader->read(x_missing.data(), count);
             }
-            vector<string> metadata(count);
-            for (size_t i = 0; i < count; ++i) {
-                if (!std::getline(meta, metadata[i])) {
-                    throw UkcError(meta_path + ": metadata row-count mismatch near row " +
-                                   std::to_string(completed + i + 1));
+            vector<string> metadata;
+            if (!npy_output) {
+                metadata.resize(count);
+                for (size_t i = 0; i < count; ++i) {
+                    if (!std::getline(meta, metadata[i])) {
+                        throw UkcError(meta_path +
+                                       ": metadata row-count mismatch near row " +
+                                       std::to_string(completed + i + 1));
+                    }
                 }
             }
             timings.loading += elapsed_seconds(load_start);
@@ -850,8 +915,16 @@ void run_v2(const string &directory, const string &result_filename,
                                   use_missing, threads);
             timings.compute += elapsed_seconds(compute_start);
             const auto output_start = Clock::now();
-            write_result_rows(output, metadata, results, invalid_rows, threads,
-                              timings.output_formatting, timings.output_io);
+            if (npy_output) {
+                write_npy_result_rows(output, result_filename, results,
+                                      invalid_rows,
+                                      timings.output_formatting,
+                                      timings.output_io);
+            } else {
+                write_result_rows(output, metadata, results, invalid_rows,
+                                  threads, timings.output_formatting,
+                                  timings.output_io);
+            }
             timings.output += elapsed_seconds(output_start);
             completed += count;
             progress.update(completed);
@@ -926,7 +999,7 @@ void process_legacy_batch(const vector<InputRow> &batch,
 void run_v1(const string &prefix, const string &result_filename,
             const vector<string> &variables, int total_sample_size,
             double overall_non_missing_rate, bool use_missing,
-            const string &io_mode, int threads) {
+            const string &io_mode, int threads, bool npy_output) {
     const auto total_start = Clock::now();
     Timings timings;
     const string cov_xy_file = prefix + "_cov_xy.table";
@@ -938,33 +1011,51 @@ void run_v1(const string &prefix, const string &result_filename,
     const auto static_start = Clock::now();
     const MatrixXd covariance = read_legacy_covariance(cov_yy_file, variables);
     const double y_quality = use_missing ? read_legacy_y_quality(y_missing_file, variables) : 1.0;
-    const std::uint64_t variants = ukc::count_tsv_rows(meta_file);
-    if (variants == 0) throw UkcError(meta_file + ": input contains no data rows");
+    const string row_count_file = npy_output ? var_x_file : meta_file;
+    const std::uint64_t variants = ukc::count_tsv_rows(row_count_file);
+    if (variants == 0) {
+        throw UkcError(row_count_file + ": input contains no data rows");
+    }
     RegressionModel model(covariance, variables.size() - 1);
     timings.static_data = elapsed_seconds(static_start);
     print_run_summary("NSS v1 legacy text", io_mode, total_sample_size, nullptr,
                       variants, variables.size(), variables, threads, use_missing,
                       (io_mode == "memory" ? variants : kBatchSize) *
-                      static_cast<std::uint64_t>(variables.size() + 2) * sizeof(double));
+                      static_cast<std::uint64_t>(variables.size() + 2) * sizeof(double),
+                      npy_output ? "npy" : "table");
 
     std::ifstream cov_xy = open_input(cov_xy_file);
     std::ifstream var_x = open_input(var_x_file);
-    std::ifstream meta = open_input(meta_file);
+    std::ifstream meta;
+    if (!npy_output) meta = open_input(meta_file);
     std::ifstream x_missing;
     if (use_missing) x_missing = open_input(x_missing_file);
     string cov_header, var_header, meta_header, x_header;
     if (!std::getline(cov_xy, cov_header)) throw UkcError(cov_xy_file + ": missing header");
     if (!std::getline(var_x, var_header)) throw UkcError(var_x_file + ": missing header");
-    if (!std::getline(meta, meta_header)) throw UkcError(meta_file + ": missing header");
+    if (!npy_output && !std::getline(meta, meta_header)) {
+        throw UkcError(meta_file + ": missing header");
+    }
     if (use_missing && !std::getline(x_missing, x_header)) throw UkcError(x_missing_file + ": missing header");
     const vector<SelectedColumn> selected = select_columns(parse_header(cov_header, cov_xy_file), variables, cov_xy_file);
     parse_header(var_header, var_x_file);
-    parse_header(meta_header, meta_file);
+    if (!npy_output) parse_header(meta_header, meta_file);
     if (use_missing) parse_header(x_header, x_missing_file);
 
     AtomicOutputFile output_file(result_filename);
     std::ofstream &output = output_file.stream();
-    output << meta_header << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+    const auto header_start = Clock::now();
+    if (npy_output) {
+        ukc::write_npy_f64_header(output, {variants, kResultColumnCount},
+                                  result_filename);
+    } else {
+        output << meta_header
+               << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+        if (!output) throw UkcError("Error writing regression result header");
+    }
+    const double header_seconds = elapsed_seconds(header_start);
+    timings.output += header_seconds;
+    timings.output_io += header_seconds;
     ProgressReporter progress(variants);
     size_t invalid_rows = 0;
     std::uint64_t completed = 0;
@@ -979,7 +1070,8 @@ void run_v1(const string &prefix, const string &result_filename,
             InputRow row;
             const bool a = static_cast<bool>(std::getline(cov_xy, row.cov_xy));
             const bool b = static_cast<bool>(std::getline(var_x, row.var_x));
-            const bool c = static_cast<bool>(std::getline(meta, row.meta));
+            const bool c = npy_output
+                ? true : static_cast<bool>(std::getline(meta, row.meta));
             const bool d = use_missing ? static_cast<bool>(std::getline(x_missing, row.x_missing)) : a;
             if (!(a && b && c && d)) {
                 throw UkcError("Input row-count mismatch near data row " +
@@ -996,18 +1088,27 @@ void run_v1(const string &prefix, const string &result_filename,
                              overall_non_missing_rate, y_quality, use_missing,
                              threads);
         timings.compute += elapsed_seconds(compute_start);
-        vector<string> metadata(batch.size());
-        for (size_t i = 0; i < batch.size(); ++i) metadata[i] = std::move(batch[i].meta);
         const auto output_start = Clock::now();
-        write_result_rows(output, metadata, results, invalid_rows, threads,
-                          timings.output_formatting, timings.output_io);
+        if (npy_output) {
+            write_npy_result_rows(output, result_filename, results, invalid_rows,
+                                  timings.output_formatting,
+                                  timings.output_io);
+        } else {
+            vector<string> metadata(batch.size());
+            for (size_t i = 0; i < batch.size(); ++i) {
+                metadata[i] = std::move(batch[i].meta);
+            }
+            write_result_rows(output, metadata, results, invalid_rows, threads,
+                              timings.output_formatting, timings.output_io);
+        }
         timings.output += elapsed_seconds(output_start);
         completed += batch.size();
         progress.update(completed);
     }
     string extra;
     if (std::getline(cov_xy, extra) || std::getline(var_x, extra) ||
-        std::getline(meta, extra) || (use_missing && std::getline(x_missing, extra))) {
+        (!npy_output && std::getline(meta, extra)) ||
+        (use_missing && std::getline(x_missing, extra))) {
         throw UkcError("Input row-count mismatch after data row " + std::to_string(variants));
     }
     progress.finish();
@@ -1049,7 +1150,9 @@ int main(int argc, const char *argv[]) {
         ("totalsize", po::value<int>(), "Base sample size (v2 defaults to manifest; v1 defaults to 292216).")
         ("overall-non-missing-rate", po::value<double>()->default_value(0.9, "0.9"), "Overall non-missing rate.")
         ("threads", po::value<int>()->default_value(1), "Worker threads (default: 1).")
-        ("io-mode", po::value<string>()->default_value("stream"), "I/O mode: stream or memory (default: stream).");
+        ("io-mode", po::value<string>()->default_value("stream"), "I/O mode: stream or memory (default: stream).")
+        ("output-format", po::value<string>()->default_value("table"),
+         "Result format: table or npy (default: table).");
 
     try {
         po::variables_map arguments;
@@ -1071,6 +1174,7 @@ int main(int argc, const char *argv[]) {
         const string phenotype = arguments["phe"].as<string>();
         const string output = arguments["out"].as<string>();
         const string io_mode = arguments["io-mode"].as<string>();
+        const string output_format = arguments["output-format"].as<string>();
         const int threads = arguments["threads"].as<int>();
         const double overall = arguments["overall-non-missing-rate"].as<double>();
         const bool use_missing = arguments.count("use-missing-rate-estimate") != 0;
@@ -1079,6 +1183,9 @@ int main(int argc, const char *argv[]) {
         }
         if (io_mode != "stream" && io_mode != "memory") {
             throw UkcError("--io-mode must be 'stream' or 'memory'");
+        }
+        if (output_format != "table" && output_format != "npy") {
+            throw UkcError("--output-format must be 'table' or 'npy'");
         }
         if (threads <= 0) throw UkcError("--threads must be greater than zero");
         if (!std::isfinite(overall) || overall <= 0.0 || overall > 1.0) {
@@ -1103,10 +1210,13 @@ int main(int argc, const char *argv[]) {
             throw UkcError("--totalsize must be greater than zero");
         }
         Eigen::setNbThreads(1);
-        const string result_filename = output + "_results.table";
+        const bool npy_output = output_format == "npy";
+        const string result_filename = output +
+            (npy_output ? "_results.npy" : "_results.table");
         if (v2) {
             run_v2(input, result_filename, variables, total_size_supplied,
-                   supplied_total_size, overall, use_missing, io_mode, threads);
+                   supplied_total_size, overall, use_missing, io_mode, threads,
+                   npy_output);
         } else {
             const int fixed = static_cast<int>(std::floor(supplied_total_size * overall));
             if (!use_missing && (fixed <= 2 ||
@@ -1114,7 +1224,7 @@ int main(int argc, const char *argv[]) {
                 throw UkcError("Effective sample size is too small for the requested model");
             }
             run_v1(input, result_filename, variables, supplied_total_size, overall,
-                   use_missing, io_mode, threads);
+                   use_missing, io_mode, threads, npy_output);
         }
         return EXIT_SUCCESS;
     } catch (const std::exception &error) {

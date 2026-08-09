@@ -69,6 +69,10 @@ def result_rows(output):
     return [line.split() for line in lines]
 
 
+def npy_results(output):
+    return np.load(pathlib.Path(str(output) + "_results.npy"), allow_pickle=False)
+
+
 def close(actual, expected, tolerance=5e-6):
     if not math.isclose(float(actual), expected, rel_tol=tolerance, abs_tol=tolerance):
         raise AssertionError(f"{actual} != {expected}")
@@ -113,6 +117,40 @@ def main():
         close(rows[1][3], math.sqrt(var_beta))
         close(rows[1][4], beta / math.sqrt(var_beta))
         close(rows[1][6], 0.99)
+
+        npy_no_cov_1 = root / "npy_no_cov_1"
+        npy_no_cov_16 = root / "npy_no_cov_16"
+        invoke(binary, prefix, npy_no_cov_1,
+               ["--overall-non-missing-rate", "1", "--threads", "1",
+                "--output-format", "npy"])
+        invoke(binary, prefix, npy_no_cov_16,
+               ["--overall-non-missing-rate", "1", "--threads", "16",
+                "--output-format", "npy"])
+        npy_values = npy_results(npy_no_cov_1)
+        if npy_values.dtype != np.dtype("<f8") or npy_values.shape != (3, 7):
+            raise AssertionError("numeric result NPY has the wrong dtype or shape")
+        if not np.array_equal(npy_values, npy_results(npy_no_cov_16),
+                              equal_nan=True):
+            raise AssertionError("1-thread and 16-thread NPY outputs differ")
+        if pathlib.Path(str(npy_no_cov_1) + "_results.table").exists():
+            raise AssertionError("NPY mode unexpectedly wrote a result table")
+        np.testing.assert_allclose(
+            npy_values[0],
+            [beta, math.sqrt(var_beta), beta / math.sqrt(var_beta),
+             float(rows[1][5]), 0.99, 100.0, 1.0],
+            rtol=5e-6, atol=5e-6)
+
+        no_meta_root = root / "no_meta_v1"
+        no_meta_root.mkdir()
+        no_meta_prefix = make_fixture(no_meta_root)
+        pathlib.Path(str(no_meta_prefix) + "_meta.table").unlink()
+        invoke(binary, no_meta_prefix, root / "no_meta_v1_npy",
+               ["--output-format", "npy", "--threads", "16"])
+        missing_meta_table = invoke(
+            binary, no_meta_prefix, root / "no_meta_v1_table", [],
+            expect_ok=False)
+        if "_meta.table" not in missing_meta_table.stderr:
+            raise AssertionError("table output did not require v1 metadata")
 
         with_cov_1 = root / "with_cov_1"
         with_cov_16 = root / "with_cov_16"
@@ -232,6 +270,45 @@ def main():
                 raise AssertionError("v2 stream/memory or 1/16-thread outputs differ")
         if "data loading" not in memory_run.stdout or "computation" not in memory_run.stdout:
             raise AssertionError("memory mode did not report separate load/compute timing")
+
+        v2_npy_stream_1 = root / "v2_npy_stream_1"
+        v2_npy_stream_16 = root / "v2_npy_stream_16"
+        v2_npy_memory_16 = root / "v2_npy_memory_16"
+        invoke(binary, v2, v2_npy_stream_1,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "1", "--output-format", "npy"],
+               totalsize=False)
+        invoke(binary, v2, v2_npy_stream_16,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "16", "--output-format", "npy"],
+               totalsize=False)
+        invoke(binary, v2, v2_npy_memory_16,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "16", "--io-mode", "memory",
+                "--output-format", "npy"], totalsize=False)
+        v2_npy_reference = npy_results(v2_npy_stream_1)
+        for output in (v2_npy_stream_16, v2_npy_memory_16):
+            if not np.array_equal(v2_npy_reference, npy_results(output),
+                                  equal_nan=True):
+                raise AssertionError(
+                    "v2 NPY stream/memory or 1/16-thread outputs differ")
+        table_numeric = np.asarray(
+            [[float(value) for value in row[2:]]
+             for row in result_rows(v2_stream_1)[1:]])
+        np.testing.assert_allclose(v2_npy_reference, table_numeric,
+                                   rtol=2e-5, atol=2e-5)
+
+        v2_without_meta = root / "v2_without_meta"
+        shutil.copytree(v2, v2_without_meta)
+        (v2_without_meta / "meta.tsv").unlink()
+        invoke(binary, v2_without_meta, root / "v2_without_meta_npy",
+               ["--covar", "C1", "--output-format", "npy",
+                "--threads", "16"], totalsize=False)
+        missing_v2_meta_table = invoke(
+            binary, v2_without_meta, root / "v2_without_meta_table",
+            ["--covar", "C1"], expect_ok=False, totalsize=False)
+        if "meta.tsv" not in missing_v2_meta_table.stderr:
+            raise AssertionError("table output did not require v2 metadata")
 
         v1_reference = root / "v1_reference"
         invoke(binary, prefix, v1_reference,
@@ -366,6 +443,12 @@ def main():
                               expect_ok=False, totalsize=False)
         if "--io-mode" not in invalid_mode.stderr:
             raise AssertionError("invalid io mode was not rejected")
+
+        invalid_output = invoke(
+            binary, v2, root / "output_format",
+            ["--output-format", "csv"], expect_ok=False, totalsize=False)
+        if "--output-format" not in invalid_output.stderr:
+            raise AssertionError("invalid output format was not rejected")
 
     print("UKC v1/v2 and adapter tests passed")
 
