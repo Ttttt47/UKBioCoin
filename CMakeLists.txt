@@ -31,7 +31,11 @@ target_include_directories(ukbiocoin_nss PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(ukbiocoin_nss PUBLIC Boost::filesystem Boost::json)
 target_compile_options(ukbiocoin_nss PRIVATE -Wall -Wextra -Wpedantic)
 
-add_executable(UKBioCoin main.cpp)
+add_executable(UKBioCoin
+    main.cpp
+    adjustment.cpp
+    statistics.cpp
+    table_metadata.cpp)
 target_include_directories(UKBioCoin PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${EIGEN3_INCLUDE_DIR}")
@@ -42,7 +46,9 @@ target_link_libraries(UKBioCoin PRIVATE
     OpenMP::OpenMP_CXX)
 target_compile_options(UKBioCoin PRIVATE -Wall -Wextra -Wpedantic)
 
-add_executable(UKBioCoinNSSAdapter nss_adapter.cpp)
+add_executable(UKBioCoinNSSAdapter
+    nss_adapter.cpp
+    table_metadata.cpp)
 target_include_directories(UKBioCoinNSSAdapter PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(UKBioCoinNSSAdapter PRIVATE
     Boost::program_options ukbiocoin_nss OpenMP::OpenMP_CXX)
@@ -68,6 +74,15 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME ukbiocoin_cdf_smoke COMMAND ukbiocoin_cdf_smoke)
 
+    add_executable(ukbiocoin_statistics_test
+        tests/test_statistics.cpp
+        statistics.cpp)
+    target_include_directories(ukbiocoin_statistics_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(ukbiocoin_statistics_test PRIVATE
+        -Wall -Wextra -Wpedantic)
+    add_test(NAME ukbiocoin_statistics COMMAND ukbiocoin_statistics_test)
+
     add_test(
         NAME ukbiocoin_regression
         COMMAND "${Python3_EXECUTABLE}"
@@ -77,4 +92,11 @@ if(BUILD_TESTING)
     set_tests_properties(ukbiocoin_regression PROPERTIES
         ENVIRONMENT "OMP_THREAD_LIMIT=16"
         TIMEOUT 120)
+
+    add_test(
+        NAME ukbiocoin_adjustment
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_adjustment.py"
+                "$<TARGET_FILE:UKBioCoin>")
+    set_tests_properties(ukbiocoin_adjustment PROPERTIES TIMEOUT 120)
 endif()

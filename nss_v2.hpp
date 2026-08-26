@@ -64,6 +64,7 @@ void validate_manifest(const std::string &directory,
 
 class NpyReader {
 public:
+    explicit NpyReader(const std::string &path);
     NpyReader(const std::string &path,
               const std::string &expected_dtype,
               const std::vector<std::uint64_t> &expected_shape);

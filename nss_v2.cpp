@@ -268,7 +268,12 @@ NpyHeader parse_npy_header(std::ifstream &input, const std::string &path) {
         if (end == cursor) {
             throw NssError(path + ": malformed NPY shape");
         }
-        const std::uint64_t value = std::stoull(shape_text.substr(cursor, end - cursor));
+        std::uint64_t value = 0;
+        try {
+            value = std::stoull(shape_text.substr(cursor, end - cursor));
+        } catch (const std::exception &) {
+            throw NssError(path + ": malformed or out-of-range NPY shape");
+        }
         if (value == 0) {
             throw NssError(path + ": NPY dimensions must be positive");
         }
@@ -540,9 +545,7 @@ void validate_manifest(const std::string &directory,
     }
 }
 
-NpyReader::NpyReader(const std::string &path,
-                     const std::string &expected_dtype,
-                     const std::vector<std::uint64_t> &expected_shape)
+NpyReader::NpyReader(const std::string &path)
     : path_(path), stream_(path, std::ios::binary) {
     if (!stream_) {
         throw NssError("Error opening " + path + " for input");
@@ -550,13 +553,6 @@ NpyReader::NpyReader(const std::string &path,
     header_ = parse_npy_header(stream_, path);
     if (header_.fortran_order) {
         throw NssError(path + ": Fortran-order arrays are not supported");
-    }
-    if (header_.dtype != expected_dtype) {
-        throw NssError(path + ": dtype " + header_.dtype +
-                       " does not match manifest dtype " + expected_dtype);
-    }
-    if (header_.shape != expected_shape) {
-        throw NssError(path + ": NPY shape does not match manifest shape");
     }
     if (header_.element_count >
         static_cast<std::uint64_t>(std::numeric_limits<std::streamoff>::max() /
@@ -573,6 +569,19 @@ NpyReader::NpyReader(const std::string &path,
                        " bytes, found " + std::to_string(static_cast<long long>(actual_size)) + ")");
     }
     stream_.seekg(header_.data_offset);
+}
+
+NpyReader::NpyReader(const std::string &path,
+                     const std::string &expected_dtype,
+                     const std::vector<std::uint64_t> &expected_shape)
+    : NpyReader(path) {
+    if (header_.dtype != expected_dtype) {
+        throw NssError(path + ": dtype " + header_.dtype +
+                       " does not match manifest dtype " + expected_dtype);
+    }
+    if (header_.shape != expected_shape) {
+        throw NssError(path + ": NPY shape does not match manifest shape");
+    }
 }
 
 void NpyReader::read(double *destination, std::size_t count) {

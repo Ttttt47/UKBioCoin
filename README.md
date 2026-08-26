@@ -124,34 +124,48 @@ When `--use-missing-rate-estimate` is not used, the following option controls th
 
 The default result is a table containing the estimated coefficients and associated statistics for every SNP. Its row order matches the input NSS.
 
-Result rows are formatted in parallel into bounded per-batch buffers and then written sequentially, preserving the historical table bytes, metadata, numeric precision, and input order. The timing summary reports formatting and file-writing time separately while retaining the combined `result writing` value.
+Results are tab-delimited, the first header field starts with `#`, and invalid
+numeric values are written as `NA`. When UKC recognizes a complete standard SNP
+metadata set, old and new aliases are normalized and reordered before any
+custom fields. Metadata that is not a complete standard set is otherwise kept
+in its original order (apart from adding the required leading `#` to its first
+header field when absent). Result rows are formatted in parallel into bounded
+per-batch buffers and written sequentially, so input order is deterministic
+across thread counts.
 
 Example:
 
 ```text
-#CHROM ID POS Effect_Allele REF_Allele ALT_Allele REF_FREQ BETA SE T-STAT -log10_P VIF nobs Quality-Score
-1 rs568927457 13453 C C T 0.00119 0.066221 0.0394034 1.68059 1.03225 0.99 262994 0.9
-1 rs199856693 14933 A A G 0.01211 0.0230924 0.0124185 1.85952 1.20097 0.99 262994 0.9
-1 rs533630043 15585 A A G 0.00192 -0.00582162 0.0310293 -0.187617 0.0699801 0.99 262994 0.9
-1 rs568149713 15777 G G A 0.00331 -0.0474425 0.0236265 -2.00802 1.35025 0.99 262994 0.9
+#CHROM POS ID REF ALT1 A1 REF_FREQ BETA SE T_STAT NEG_LOG10_P VIF OBS_CT QUALITY_SCORE
+1 13453 rs568927457 C T C 0.00119 0.066221 0.0394034 1.68059 1.03225 0.99 262994 0.9
+1 14933 rs199856693 A G A 0.01211 0.0230924 0.0124185 1.85952 1.20097 0.99 262994 0.9
+1 15585 rs533630043 A G A 0.00192 -0.00582162 0.0310293 -0.187617 0.0699801 0.99 262994 0.9
 ...
 ```
 
-The leading columns are copied from the input metadata file; their number and meaning depend on that file. UKC appends the following result columns:
+The canonical metadata columns are `#CHROM`, `POS`, `ID`, `REF`, `ALT1`, `A1`,
+and `REF_FREQ`. `A1` is the counted/effect allele corresponding to `BETA`.
+Recognized custom metadata columns follow `REF_FREQ`. UKC appends:
 
 - `BETA`: This column contains the estimated regression coefficients for each predictor variable.
 
 - `SE`: This column contains the standard error estimates for each coefficient.
 
-- `T-STAT`: This column contains the t-statistic values for each coefficient, which indicate the strength of the evidence against the null hypothesis that the true coefficient is zero.
+- `T_STAT`: This column contains the t-statistic values for each coefficient, which indicate the strength of the evidence against the null hypothesis that the true coefficient is zero.
 
-- `-log10_P`: This column contains the negative base-10 logarithm of the p-value for each coefficient. Larger values indicate stronger evidence against the null hypothesis.
+- `NEG_LOG10_P`: This column contains the negative base-10 logarithm of the two-sided t-test p-value. Larger values indicate stronger evidence against the null hypothesis.
 
 - `VIF`: This column contains the variance inflation factor for the SNP coefficient.
 
-- `nobs`: This column contains the estimated number of observations used in the regression.
+- `OBS_CT`: This column contains the estimated number of observations used in the regression.
 
-- `Quality-Score`: This column contains the quality score of the regression, which is the product of non-missing rates of SNP, covariates and phenotype.
+- `QUALITY_SCORE`: This column contains the quality score of the regression, which is the product of non-missing rates of SNP, covariates and phenotype.
+
+For sample size `n` and `c` user-specified covariates, UKC consistently uses
+the residual degrees of freedom `n - c - 2` for residual variance, `SE`,
+`T_STAT`, and the two-sided t p-value. Rows with `n <= c + 2` retain their
+metadata, `OBS_CT`, and `QUALITY_SCORE`, while the five regression statistics
+are written as `NA` (or `NaN` in NPY output).
 
 #### Numeric NPY output
 
@@ -167,11 +181,51 @@ UKBioCoin --file test_data/sam.nss \
 
 This creates `test_data/test.numeric_results.npy`, a standard C-order,
 little-endian `float64` matrix with shape `(number_of_variants, 7)`. Its columns
-are, in order, `BETA`, `SE`, `T-STAT`, `-log10_P`, `VIF`, `nobs`, and
-`Quality-Score`. No column-name row or variant metadata is stored in this
-array. Invalid numeric result rows retain `NaN` values. Because metadata is not
-accessed in this mode, the input `meta.tsv` or legacy `_meta.table` file may be
-absent.
+are, in order, `BETA`, `SE`, `T_STAT`, `NEG_LOG10_P`, `VIF`, `OBS_CT`, and
+`QUALITY_SCORE`. No column-name row or variant metadata is stored in this
+array. On an invalid regression row, the first five statistic values are
+`NaN`, while `OBS_CT` and `QUALITY_SCORE` remain populated. Because metadata is
+not accessed in this mode, the input `meta.tsv` or legacy `_meta.table` file may
+be absent.
+
+### Genomic-control adjustment
+
+The same executable can post-process a UKC table or numeric NPY result:
+
+```bash
+UKBioCoin --adjust-file test_data/test_results.table \
+          --out test_data/test.gc
+
+UKBioCoin --adjust-file test_data/test_results.npy \
+          --out test_data/test.gc.numeric \
+          --output-format npy
+```
+
+Input is detected as NPY by a `.npy` suffix; all other paths are parsed as
+tables. Adjustment mode is mutually exclusive with regression options such as
+`--file`, `--phe`, and `--covar`. It computes
+`lambda_raw = median(T_STAT^2) / 0.456` over valid rows and uses
+`max(1, lambda_raw)` by default. Supply a finite positive `--lambda` to use that
+value directly. Both the raw and used lambda are reported.
+
+GC probabilities are evaluated in log space from
+`T_STAT^2 / lambda_used`, avoiding underflow for very small probabilities.
+Table input accepts both the new `T_STAT`/`NEG_LOG10_P` names and the legacy
+`T-STAT`/`-log10_P` aliases. Invalid rows stay in place and do not contribute to
+the lambda estimate.
+
+- Table output is `<out>.adjusted`. For table input it keeps all metadata,
+  removes the seven regression-statistic columns, and appends
+  `NEG_LOG10_UNADJ` and `NEG_LOG10_GC`. For NPY input it writes
+  `#ROW_INDEX`, `NEG_LOG10_UNADJ`, and `NEG_LOG10_GC`.
+- NPY output is `<out>.adjusted.npy`, a C-order little-endian `float64` matrix
+  with shape `N x 2`: `NEG_LOG10_UNADJ`, `NEG_LOG10_GC`.
+
+The GC value is deliberately based on the chi-square-one-degree-of-freedom
+tail of `T_STAT^2`, while the main UKC p-value uses a finite-residual-df t
+distribution. Consequently, the two columns can differ slightly even when
+`lambda_used` is 1; this is a difference in reference distribution, not a row
+ordering or precision error.
 
 ### Performance recommendation
 
@@ -226,6 +280,21 @@ ctest --test-dir build --output-on-failure
 
 The executables are written to `build/UKBioCoin` and `build/UKBioCoinNSSAdapter`.
 
+`ctest` covers the regression formulas, metadata compatibility, adapter
+atomicity, strict NPY validation, and GC table/NPY combinations. To additionally
+regenerate and validate the repository's full 100,000-variant demo (including
+PLINK2 comparison and the validation plot), run:
+
+```bash
+python tests/test_demo.py \
+  build/UKBioCoin \
+  build/UKBioCoinNSSAdapter \
+  "$(command -v Rscript)"
+```
+
+This integration test requires the demo R environment and `plink2`; it is kept
+outside routine CTest because it regenerates both v2 and legacy NSS datasets.
+
 ### Generating Naive Summary Statistics (NSS) for UKBioCoin
 
 UKBioCoin 2.0 uses NSS v2 by default. It stores standard little-endian, C-order NumPy arrays and splits COVxy into one float32 vector per phenotype. COVyy, var_x, and missing-rate arrays remain float64. This avoids parsing unrelated phenotype values and substantially reduces COVxy storage. Legacy text NSS v1 remains a supported input format.
@@ -246,6 +315,12 @@ Rscript script.R \
 ```
 
 The default output is `2.nss/euro_10Ksnp.nss`. Use `--nss-format legacy` to generate the old files under `2.matrix`, and use `--force` only when an existing NSS output should be replaced. The generator obtains the base sample count from the input `.fam` or `.psam`, validates the SNP ID/order across PLINK outputs, and writes each COVxy vector immediately instead of building a complete SNP-by-phenotype matrix in memory.
+
+Newly generated metadata uses the canonical
+`#CHROM POS ID REF ALT1 A1 REF_FREQ` order. The generator takes `A1` directly
+from PLINK's additive GLM output and verifies the same allele direction for
+every phenotype, including variants with an allele frequency tie, so `A1`
+always corresponds to the stored COVxy/UKC `BETA` direction.
 
 For additional options, run:
 
@@ -287,7 +362,18 @@ UKBioCoinNSSAdapter \
   --threads 16
 ```
 
-The adapter writes to a temporary directory, validates the completed manifest and all arrays, and atomically renames it. It refuses to overwrite an output unless `--force` is given. Legacy row labels are treated as advisory so files created by older versions with duplicated labels remain convertible; physical row order is preserved and a warning is reported.
+The adapter writes to a temporary directory, validates the completed manifest
+and all arrays, and atomically renames it. It refuses to overwrite an output
+unless `--force` is given. When all standard metadata fields are recognized,
+the aliases `CHROM/#CHROM`, `REF_Allele/REF`, `ALT_Allele/ALT1`, and
+`Effect_Allele/A1` are renamed and reordered to the canonical layout; extra
+fields follow in their original order. Conflicting aliases or inconsistent row
+widths are rejected. The adapter preserves legacy allele values; it cannot
+reconstruct a different BETA direction from summary tables, so a legacy
+`Effect_Allele` must already correspond to its stored COVxy direction. Legacy
+row labels are treated as advisory so files created
+by older versions with duplicated labels remain convertible; physical row
+order is preserved and a warning is reported.
 
 ### Legacy NSS v1 input formats
 
@@ -295,16 +381,19 @@ You may also generate the NSS files by yourself. The following is the detailed d
 
 #### xxx_meta.table
 
-For the `xxx_meta.table` format, the first row lists all the metadata fields' names. These metadata are information about the SNPs to be added to the collunms of the result file, So the number of rows of it should be the same with `xxx_var_x.table`(which is equal to the number of SNPs). You can tailor them with your interests.
+For `xxx_meta.table`, the first row lists the metadata field names and each
+following row describes one SNP. Its data-row count must match
+`xxx_var_x.table` (the number of SNPs). Custom fields are allowed; the complete
+standard field set is canonicalized as described above.
 
 For example:
 
 ```
-#CHROM ID POS REF_Allele ALT_Allele REF_FREQ
-1 rs568927457 13453 C T 0.001190
-1 rs554760071 13483 C G 0.001235
-1 rs199856693 14933 A G 0.012111
-1 rs533630043 15585 A G 0.001922
+#CHROM POS ID REF ALT1 A1 REF_FREQ
+1 13453 rs568927457 C T C 0.001190
+1 13483 rs554760071 C G C 0.001235
+1 14933 rs199856693 A G A 0.012111
+1 15585 rs533630043 A G A 0.001922
 ...
 ```
 

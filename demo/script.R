@@ -245,15 +245,67 @@ cov_yy <- cov(scaled_phenotypes, use = "pairwise")
 y_missing <- vapply(scaled_phenotypes, function(value) mean(is.na(value)), numeric(1))
 x_missing <- gcount$MISSING_CT / (gcount$MISSING_CT + called_count)
 
-if (!all(c("REF", "ALT", "ALT_FREQS") %in% names(afreq))) {
-  stop("PLINK frequency output lacks REF, ALT, or ALT_FREQS")
+required_frequency_columns <- c("#CHROM", "ID", "REF", "ALT", "ALT_FREQS")
+if (!all(required_frequency_columns %in% names(afreq))) {
+  stop("PLINK frequency output lacks required columns: ",
+       paste(setdiff(required_frequency_columns, names(afreq)), collapse = ", "))
 }
+if (!"POS" %in% names(pvar)) stop("PLINK pvar/bim input lacks POS")
 afreq$REF_FREQ <- 1 - afreq$ALT_FREQS
 afreq$POS <- pvar$POS
-afreq$Effect_Allele <- ifelse(afreq$REF_FREQ > 0.5, afreq$ALT, afreq$REF)
-metadata <- afreq[, .(`#CHROM`, ID, POS, Effect_Allele,
-                      REF_Allele = REF, ALT_Allele = ALT, REF_FREQ)]
-if (!identical(as.character(metadata$ID), variant_ids)) stop("Internal metadata order mismatch")
+
+read_additive_glm <- function(path) {
+  glm <- fread(path, nThread = threads)
+  if ("TEST" %in% names(glm)) glm <- glm[TEST == "ADD"]
+  required_glm_columns <- c("ID", "A1", "BETA")
+  if (!all(required_glm_columns %in% names(glm))) {
+    stop(path, " lacks required columns: ",
+         paste(setdiff(required_glm_columns, names(glm)), collapse = ", "))
+  }
+  if (!identical(as.character(glm$ID), variant_ids)) {
+    stop("Variant ID/order mismatch in ", path)
+  }
+  glm$A1 <- as.character(glm$A1)
+  if (anyNA(glm$A1) || any(!nzchar(glm$A1))) {
+    stop(path, " contains a missing or empty A1 value")
+  }
+  glm
+}
+
+glm_paths <- file.path("1.plink_temp", paste0("single_reg.", phenotypes, ".glm.linear"))
+reference_glm_index <- which(file.exists(glm_paths))[1]
+if (is.na(reference_glm_index)) {
+  stop("No PLINK GLM result is available to define the BETA-counted A1 allele")
+}
+reference_glm <- read_additive_glm(glm_paths[[reference_glm_index]])
+
+# PLINK's A1 is authoritative because each COVxy vector below is var_x * glm$BETA.
+# In particular, REF_FREQ == 0.5 is resolved by PLINK's A1 instead of an arbitrary
+# REF/ALT frequency tie-break.
+afreq$A1 <- reference_glm$A1
+metadata <- afreq[, .(`#CHROM`, POS, ID, REF, ALT1 = ALT, A1, REF_FREQ)]
+canonical_metadata_names <- c("#CHROM", "POS", "ID", "REF", "ALT1", "A1",
+                              "REF_FREQ")
+if (!identical(names(metadata), canonical_metadata_names)) {
+  stop("Internal metadata header is not canonical")
+}
+if (!identical(as.character(metadata$ID), variant_ids)) {
+  stop("Internal metadata order mismatch")
+}
+if (!identical(as.character(metadata$A1), as.character(reference_glm$A1))) {
+  stop("Internal metadata A1 direction mismatch")
+}
+valid_a1 <- metadata$A1 == metadata$REF | metadata$A1 == metadata$ALT1
+if (anyNA(valid_a1) || any(!valid_a1)) {
+  stop("PLINK A1 is not one of the corresponding REF/ALT1 alleles")
+}
+tie_rows <- is.finite(metadata$REF_FREQ) & metadata$REF_FREQ == 0.5
+if (any(tie_rows) &&
+    !identical(as.character(metadata$A1[tie_rows]),
+               as.character(reference_glm$A1[tie_rows]))) {
+  stop("REF_FREQ == 0.5 A1 tie handling is inconsistent with PLINK")
+}
+rm(reference_glm)
 
 if (nss_format == "v2") {
   dir.create("2.nss", showWarnings = FALSE)
@@ -272,12 +324,10 @@ if (nss_format == "v2") {
       warning("Missing PLINK GLM for ", name, "; writing an all-NaN COVxy vector")
       cov_xy <- rep(NaN, variant_count)
     } else {
-      glm <- fread(glm_path, nThread = threads)
-      if ("TEST" %in% names(glm)) glm <- glm[TEST == "ADD"]
-      if (!identical(as.character(glm$ID), variant_ids)) {
-        stop("Variant ID/order mismatch in ", glm_path)
+      glm <- read_additive_glm(glm_path)
+      if (!identical(as.character(glm$A1), as.character(metadata$A1))) {
+        stop("PLINK A1 direction differs across phenotypes in ", glm_path)
       }
-      if (!"BETA" %in% names(glm)) stop(glm_path, " lacks BETA")
       cov_xy <- var_x * glm$BETA
     }
     write_npy(file.path(temporary, indexed_cov_path(i)), cov_xy, "<f4", variant_count)
@@ -366,9 +416,10 @@ if (nss_format == "v2") {
       warning("Missing PLINK GLM for ", name, "; writing an all-NA COVxy column")
       cov_xy_columns[[i]] <- rep(NA_real_, variant_count)
     } else {
-      glm <- fread(glm_path, nThread = threads)
-      if ("TEST" %in% names(glm)) glm <- glm[TEST == "ADD"]
-      if (!identical(as.character(glm$ID), variant_ids)) stop("Variant ID/order mismatch in ", glm_path)
+      glm <- read_additive_glm(glm_path)
+      if (!identical(as.character(glm$A1), as.character(metadata$A1))) {
+        stop("PLINK A1 direction differs across phenotypes in ", glm_path)
+      }
       cov_xy_columns[[i]] <- var_x * glm$BETA
     }
   }
@@ -406,13 +457,17 @@ if (!novisualize) {
                 "--out", result_prefix,
                 if (nss_format == "legacy") c("--totalsize", sample_count) else NULL))
   result <- fread(paste0(result_prefix, "_results.table"), nThread = threads)
-  glm <- fread(file.path("1.plink_temp", paste0("single_reg.", phenotypes[[1]],
-                                                ".glm.linear")), nThread = threads)
-  if ("TEST" %in% names(glm)) glm <- glm[TEST == "ADD"]
-  result$BETA <- ifelse(result$Effect_Allele == glm$A1, result$BETA, -result$BETA)
+  glm <- read_additive_glm(file.path(
+    "1.plink_temp", paste0("single_reg.", phenotypes[[1]], ".glm.linear")))
+  if (!identical(as.character(result$ID), as.character(glm$ID))) {
+    stop("Variant ID/order mismatch between UKC and PLINK validation results")
+  }
+  if (!identical(as.character(result$A1), as.character(glm$A1))) {
+    stop("A1 direction mismatch between UKC and PLINK validation results")
+  }
   comparison <- merge(
-    result[, .(ID, UKC_BETA = BETA, UKC_SE = SE, UKC_TSTAT = `T-STAT`,
-               UKC_P = 10^(-`-log10_P`))],
+    result[, .(ID, UKC_BETA = BETA, UKC_SE = SE, UKC_TSTAT = T_STAT,
+               UKC_P = 10^(-NEG_LOG10_P))],
     glm[, .(ID, UKB_BETA = BETA, UKB_SE = SE, UKB_TSTAT = T_STAT, UKB_P = P)],
     by = "ID")
   comparison <- na.omit(comparison)

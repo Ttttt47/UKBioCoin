@@ -49,6 +49,36 @@ rs3 G
     return prefix
 
 
+def write_standard_metadata(prefix, legacy=True, conflict=False,
+                            short_row=False):
+    if conflict:
+        header = ("#CHROM CHROM POS ID REF_Allele ALT_Allele "
+                  "Effect_Allele REF_FREQ EXTRA\n")
+        rows = [
+            "1 1 101 rs1 G A A 0.4 keep1\n",
+            "1 1 102 rs2 T C C 0.6 keep2\n",
+            "2 2 103 rs3 A G G 0.3 keep3\n",
+        ]
+    elif legacy:
+        header = ("EXTRA ALT_Allele ID REF_FREQ CHROM Effect_Allele "
+                  "REF_Allele POS\n")
+        rows = [
+            "keep1 A rs1 0.4 1 A G 101\n",
+            "keep2 C rs2 0.6 1 C T 102\n",
+            "keep3 G rs3 0.3 2 G A 103\n",
+        ]
+    else:
+        header = "#CHROM POS ID REF ALT1 A1 REF_FREQ EXTRA\n"
+        rows = [
+            "1 101 rs1 G A A 0.4 keep1\n",
+            "1 102 rs2 T C C 0.6 keep2\n",
+            "2 103 rs3 A G G 0.3 keep3\n",
+        ]
+    if short_row:
+        rows[1] = "keep2 C rs2 0.6 1 C T\n"
+    write(str(prefix) + "_meta.table", header + "".join(rows))
+
+
 def invoke(binary, prefix, output, extra, expect_ok=True, totalsize=True):
     command = [binary, "--file", str(prefix), "--phe", "Y",
                "--out", str(output)]
@@ -66,7 +96,15 @@ def invoke(binary, prefix, output, extra, expect_ok=True, totalsize=True):
 
 def result_rows(output):
     lines = pathlib.Path(str(output) + "_results.table").read_text().splitlines()
-    return [line.split() for line in lines]
+    rows = [line.split("\t") for line in lines]
+    if any(" " in line and "\t" not in line for line in lines):
+        raise AssertionError("result table is not tab-delimited")
+    return rows
+
+
+def row_map(output):
+    rows = result_rows(output)
+    return rows[0], [dict(zip(rows[0], row)) for row in rows[1:]]
 
 
 def npy_results(output):
@@ -92,26 +130,34 @@ def main():
 
         no_cov_1 = root / "no_cov_1"
         no_cov_16 = root / "no_cov_16"
+        no_cov_memory_16 = root / "no_cov_memory_16"
         invoke(binary, prefix, no_cov_1,
                ["--overall-non-missing-rate", "1", "--threads", "1"])
         invoke(binary, prefix, no_cov_16,
                ["--overall-non-missing-rate", "1", "--threads", "16"])
-        if pathlib.Path(str(no_cov_1) + "_results.table").read_bytes() != \
-                pathlib.Path(str(no_cov_16) + "_results.table").read_bytes():
-            raise AssertionError("1-thread and 16-thread no-covariate outputs differ")
+        invoke(binary, prefix, no_cov_memory_16,
+               ["--overall-non-missing-rate", "1", "--threads", "16",
+                "--io-mode", "memory"])
+        no_cov_reference = pathlib.Path(
+            str(no_cov_1) + "_results.table").read_bytes()
+        for candidate in (no_cov_16, no_cov_memory_16):
+            if pathlib.Path(str(candidate) + "_results.table").read_bytes() != \
+                    no_cov_reference:
+                raise AssertionError(
+                    "v1 no-covariate stream/memory or 1/16-thread outputs differ")
         expected_no_covariate = (
-            "ID A BETA SE T-STAT -log10_P VIF nobs Quality-Score\n"
-            "rs1 A 0.4 0.13633 2.93406 2.3802 0.99  100 1\n"
-            "rs2 C -0.25 0.156911 -1.59326 0.941865 0.99  100 1\n"
-            "rs3 G 0.15 0.224227 0.668965 0.296631 0.99  100 1\n")
+            "#ID\tA\tBETA\tSE\tT_STAT\tNEG_LOG10_P\tVIF\tOBS_CT\tQUALITY_SCORE\n"
+            "rs1\tA\t0.4\t0.137024\t2.9192\t2.36115\t0.99\t100\t1\n"
+            "rs2\tC\t-0.25\t0.15771\t-1.58519\t0.934998\t0.99\t100\t1\n"
+            "rs3\tG\t0.15\t0.225368\t0.665578\t0.294782\t0.99\t100\t1\n")
         if pathlib.Path(str(no_cov_1) + "_results.table").read_text() != \
                 expected_no_covariate:
-            raise AssertionError("optimized output formatting changed the legacy table bytes")
+            raise AssertionError("standard table bytes differ from the golden result")
         rows = result_rows(no_cov_1)
         if len(rows) != 4:
             raise AssertionError("no-covariate output lost rows")
         beta = 0.2 / 0.5
-        rss = 100.0 * (1.0 - beta * 0.2) / 99.0
+        rss = 100.0 * (1.0 - beta * 0.2) / 98.0
         var_beta = rss * (1.0 / 0.5) / 100.0
         close(rows[1][2], beta)
         close(rows[1][3], math.sqrt(var_beta))
@@ -120,18 +166,24 @@ def main():
 
         npy_no_cov_1 = root / "npy_no_cov_1"
         npy_no_cov_16 = root / "npy_no_cov_16"
+        npy_no_cov_memory_16 = root / "npy_no_cov_memory_16"
         invoke(binary, prefix, npy_no_cov_1,
                ["--overall-non-missing-rate", "1", "--threads", "1",
                 "--output-format", "npy"])
         invoke(binary, prefix, npy_no_cov_16,
                ["--overall-non-missing-rate", "1", "--threads", "16",
                 "--output-format", "npy"])
+        invoke(binary, prefix, npy_no_cov_memory_16,
+               ["--overall-non-missing-rate", "1", "--threads", "16",
+                "--io-mode", "memory", "--output-format", "npy"])
         npy_values = npy_results(npy_no_cov_1)
         if npy_values.dtype != np.dtype("<f8") or npy_values.shape != (3, 7):
             raise AssertionError("numeric result NPY has the wrong dtype or shape")
-        if not np.array_equal(npy_values, npy_results(npy_no_cov_16),
-                              equal_nan=True):
-            raise AssertionError("1-thread and 16-thread NPY outputs differ")
+        for candidate in (npy_no_cov_16, npy_no_cov_memory_16):
+            if not np.array_equal(npy_values, npy_results(candidate),
+                                  equal_nan=True):
+                raise AssertionError(
+                    "v1 NPY stream/memory or 1/16-thread outputs differ")
         if pathlib.Path(str(npy_no_cov_1) + "_results.table").exists():
             raise AssertionError("NPY mode unexpectedly wrote a result table")
         np.testing.assert_allclose(
@@ -154,13 +206,32 @@ def main():
 
         with_cov_1 = root / "with_cov_1"
         with_cov_16 = root / "with_cov_16"
+        with_cov_memory_16 = root / "with_cov_memory_16"
         invoke(binary, prefix, with_cov_1,
                ["--covar", "C1", "--use-missing-rate-estimate", "--threads", "1"])
         invoke(binary, prefix, with_cov_16,
                ["--covar", "C1", "--use-missing-rate-estimate", "--threads", "16"])
-        if pathlib.Path(str(with_cov_1) + "_results.table").read_bytes() != \
-                pathlib.Path(str(with_cov_16) + "_results.table").read_bytes():
-            raise AssertionError("1-thread and 16-thread covariate outputs differ")
+        invoke(binary, prefix, with_cov_memory_16,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "16", "--io-mode", "memory"])
+        with_cov_reference = pathlib.Path(
+            str(with_cov_1) + "_results.table").read_bytes()
+        for candidate in (with_cov_16, with_cov_memory_16):
+            if pathlib.Path(str(candidate) + "_results.table").read_bytes() != \
+                    with_cov_reference:
+                raise AssertionError(
+                    "v1 covariate stream/memory or 1/16-thread outputs differ")
+        cov_header, cov_rows = row_map(with_cov_1)
+        expected_covariate = [
+            (0.367347, 0.16379, 2.2428, 1.55017, 1.00604, 71, 0.7128),
+            (-0.27673, 0.186824, -1.48123, 0.843958, 0.991914, 70, 0.7056),
+            (0.170341, 0.269135, 0.63292, 0.276567, 0.987482, 69, 0.6984),
+        ]
+        for row, expected in zip(cov_rows, expected_covariate):
+            for name, value in zip(
+                    ("BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF",
+                     "OBS_CT", "QUALITY_SCORE"), expected):
+                close(row[name], value)
 
         wide_names = " ".join(f'\"W{i}\"' for i in range(20))
         wide_values = " ".join(str(i) for i in range(20))
@@ -176,6 +247,63 @@ def main():
                 pathlib.Path(str(reordered) + "_results.table").read_bytes():
             raise AssertionError("reordered/wide COVXY columns changed results")
 
+        # Two covariates exercise the shared df=n-c-2 formula independently.
+        write(str(prefix) + "_cov_xy.table", '''"Y" "C1" "C2"
+"1" 0.2 0.1 -0.05
+"2" -0.1 0.05 0.02
+"3" 0.03 -0.02 0.04
+''')
+        write(str(prefix) + "_cov_yy.table", '''"Y" "C1" "C2"
+"Y" 1 0.2 -0.1
+"C1" 0.2 1 0.25
+"C2" -0.1 0.25 1
+''')
+        two_cov = root / "two_cov"
+        invoke(binary, prefix, two_cov,
+               ["--covar", "C1,C2", "--overall-non-missing-rate", "1",
+                "--threads", "16"])
+        _, two_cov_rows = row_map(two_cov)
+        expected_two_cov = [
+            (0.347107, 0.137439, 2.52553, 1.87976, 1.02273),
+            (-0.273752, 0.154115, -1.77629, 1.10318, 0.996377),
+            (0.208671, 0.221198, 0.943368, 0.458594, 1.00284),
+        ]
+        for row, expected in zip(two_cov_rows, expected_two_cov):
+            for name, value in zip(
+                    ("BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF"),
+                    expected):
+                close(row[name], value)
+
+        # Per-SNP n=c+2 is invalid, while n=c+3 has one residual degree of freedom.
+        prefix = make_fixture(root)
+        write(str(prefix) + "_x_missing.table", '''"" "x_missing"
+"1" 0.95
+"2" 0.94
+"3" 0.03
+''')
+        boundary = root / "df_boundary"
+        invoke(binary, prefix, boundary,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "16"])
+        _, boundary_rows = row_map(boundary)
+        if [int(row["OBS_CT"]) for row in boundary_rows] != [3, 4, 69]:
+            raise AssertionError("per-SNP missing rates did not produce n=3,4,69")
+        statistic_names = ("BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF")
+        if [boundary_rows[0][name] for name in statistic_names] != ["NA"] * 5:
+            raise AssertionError("n=c+2 row was not marked invalid")
+        if any(boundary_rows[1][name] == "NA" for name in statistic_names):
+            raise AssertionError("n=c+3 row was not computed with df=1")
+        boundary_npy = root / "df_boundary_npy"
+        invoke(binary, prefix, boundary_npy,
+               ["--covar", "C1", "--use-missing-rate-estimate",
+                "--threads", "16", "--output-format", "npy"])
+        boundary_values = npy_results(boundary_npy)
+        if not np.isnan(boundary_values[0, :5]).all() or \
+                not np.isfinite(boundary_values[1, :5]).all():
+            raise AssertionError("NPY df boundary validity differs from table output")
+        np.testing.assert_array_equal(boundary_values[:, 5], [3.0, 4.0, 69.0])
+
+        prefix = make_fixture(root)
         write(str(prefix) + "_cov_xy.table", '''"Y" "C1" "junk"
 "1" NA 0.1 9
 "2" -0.1 0.05 8
@@ -184,8 +312,10 @@ def main():
         na_output = root / "na"
         invoke(binary, prefix, na_output,
                ["--overall-non-missing-rate", "1", "--threads", "1"])
-        if "nan" not in pathlib.Path(str(na_output) + "_results.table").read_text().lower():
-            raise AssertionError("NA row was not preserved as a non-finite result")
+        _, na_rows = row_map(na_output)
+        if [na_rows[0][name] for name in
+                ("BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF")] != ["NA"] * 5:
+            raise AssertionError("invalid row was not written with table NA values")
 
         prefix = make_fixture(root)
         missing = invoke(binary, prefix, root / "missing_col",
@@ -250,6 +380,87 @@ def main():
             raise AssertionError("var_x is not interoperable float64 NPY")
         if np.load(v2 / "cov_yy.npy").shape != (3, 3):
             raise AssertionError("cov_yy NPY has the wrong shape")
+        if (v2 / "meta.tsv").read_text() != "#ID\tA\nrs1\tA\nrs2\tC\nrs3\tG\n":
+            raise AssertionError("adapter did not preserve custom metadata as TSV")
+
+        # Legacy standard metadata is renamed/reordered, with extras appended.
+        canonical_root = root / "canonical"
+        canonical_root.mkdir()
+        canonical_prefix = make_fixture(canonical_root)
+        write_standard_metadata(canonical_prefix, legacy=True)
+        canonical_v1_out = root / "canonical_v1"
+        invoke(binary, canonical_prefix, canonical_v1_out,
+               ["--overall-non-missing-rate", "1", "--threads", "16"])
+        canonical_header = result_rows(canonical_v1_out)[0]
+        expected_metadata_header = [
+            "#CHROM", "POS", "ID", "REF", "ALT1", "A1", "REF_FREQ", "EXTRA"]
+        if canonical_header[:8] != expected_metadata_header:
+            raise AssertionError("old v1 metadata was not canonicalized")
+        if canonical_header[8:] != [
+                "BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF",
+                "OBS_CT", "QUALITY_SCORE"]:
+            raise AssertionError("canonical statistic names/order are incorrect")
+
+        canonical_v2 = root / "canonical.nss"
+        canonical_conversion = subprocess.run(
+            [adapter, "--input-prefix", str(canonical_prefix), "--output",
+             str(canonical_v2), "--sample-count", "100", "--threads", "16"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if canonical_conversion.returncode != 0:
+            raise AssertionError(canonical_conversion.stdout + canonical_conversion.stderr)
+        expected_meta = (
+            "#CHROM\tPOS\tID\tREF\tALT1\tA1\tREF_FREQ\tEXTRA\n"
+            "1\t101\trs1\tG\tA\tA\t0.4\tkeep1\n"
+            "1\t102\trs2\tT\tC\tC\t0.6\tkeep2\n"
+            "2\t103\trs3\tA\tG\tG\t0.3\tkeep3\n")
+        if (canonical_v2 / "meta.tsv").read_text() != expected_meta:
+            raise AssertionError("adapter canonical metadata values/order are incorrect")
+        canonical_v2_out = root / "canonical_v2_out"
+        invoke(binary, canonical_v2, canonical_v2_out,
+               ["--overall-non-missing-rate", "1", "--threads", "16"],
+               totalsize=False)
+        old_v2 = root / "old_metadata.nss"
+        shutil.copytree(canonical_v2, old_v2)
+        old_v2_meta_prefix = root / "old_v2_meta"
+        write_standard_metadata(old_v2_meta_prefix, legacy=True)
+        (old_v2 / "meta.tsv").write_text(
+            pathlib.Path(str(old_v2_meta_prefix) + "_meta.table").read_text())
+        old_v2_out = root / "old_v2_out"
+        invoke(binary, old_v2, old_v2_out,
+               ["--overall-non-missing-rate", "1", "--threads", "16"],
+               totalsize=False)
+        for candidate in (canonical_v2_out, old_v2_out):
+            if result_rows(candidate)[0] != canonical_header:
+                raise AssertionError("old/new v2 metadata headers differ from v1")
+            if [row[:8] for row in result_rows(candidate)[1:]] != \
+                    [row[:8] for row in result_rows(canonical_v1_out)[1:]]:
+                raise AssertionError("canonical metadata values/order changed")
+
+        # Alias conflicts and row-width changes fail before publishing output.
+        bad_metadata_root = root / "bad_metadata"
+        bad_metadata_root.mkdir()
+        conflict_prefix = make_fixture(bad_metadata_root)
+        write_standard_metadata(conflict_prefix, conflict=True)
+        conflict_v2 = root / "conflict.nss"
+        conflict_result = subprocess.run(
+            [adapter, "--input-prefix", str(conflict_prefix), "--output",
+             str(conflict_v2), "--sample-count", "100"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if conflict_result.returncode == 0 or "both map" not in conflict_result.stderr:
+            raise AssertionError("adapter did not reject conflicting metadata aliases")
+        if conflict_v2.exists() or list(root.glob("conflict.nss.tmp.*")):
+            raise AssertionError("failed adapter conversion left a published/temp output")
+        short_prefix = make_fixture(bad_metadata_root)
+        write_standard_metadata(short_prefix, legacy=True, short_row=True)
+        short_v2 = root / "short.nss"
+        short_result = subprocess.run(
+            [adapter, "--input-prefix", str(short_prefix), "--output",
+             str(short_v2), "--sample-count", "100"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if short_result.returncode == 0 or "field count" not in short_result.stderr:
+            raise AssertionError("adapter did not reject a short metadata row")
+        if short_v2.exists() or list(root.glob("short.nss.tmp.*")):
+            raise AssertionError("metadata row failure left adapter output")
 
         v2_stream_1 = root / "v2_stream_1"
         v2_stream_16 = root / "v2_stream_16"
@@ -292,9 +503,12 @@ def main():
                                   equal_nan=True):
                 raise AssertionError(
                     "v2 NPY stream/memory or 1/16-thread outputs differ")
+        table_header, table_rows = row_map(v2_stream_1)
+        numeric_names = [
+            "BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF",
+            "OBS_CT", "QUALITY_SCORE"]
         table_numeric = np.asarray(
-            [[float(value) for value in row[2:]]
-             for row in result_rows(v2_stream_1)[1:]])
+            [[float(row[name]) for name in numeric_names] for row in table_rows])
         np.testing.assert_allclose(v2_npy_reference, table_numeric,
                                    rtol=2e-5, atol=2e-5)
 
@@ -337,7 +551,7 @@ def main():
         rows = result_rows(v2_no_cov_16)
         quantized_cov = float(np.float32(0.2))
         beta = quantized_cov / 0.5
-        rss = 100.0 * (1.0 - beta * quantized_cov) / 99.0
+        rss = 100.0 * (1.0 - beta * quantized_cov) / 98.0
         expected_se = math.sqrt(rss * 2.0 / 100.0)
         close(rows[1][2], beta)
         close(rows[1][3], expected_se)
@@ -360,6 +574,28 @@ def main():
             stderr=subprocess.PIPE)
         if overwrite.returncode == 0 or "--force" not in overwrite.stderr:
             raise AssertionError("adapter overwrote output without --force")
+        forced = subprocess.run(
+            [adapter, "--input-prefix", str(prefix), "--output", str(v2),
+             "--sample-count", "100", "--threads", "16", "--force"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if forced.returncode != 0 or not (v2 / "manifest.json").exists():
+            raise AssertionError("adapter --force replacement failed atomically")
+        protected_manifest = (v2 / "manifest.json").read_bytes()
+        protected_meta = (v2 / "meta.tsv").read_bytes()
+        write(str(prefix) + "_meta.table", "ID A\nrs1\nrs2 C\nrs3 G\n")
+        failed_force = subprocess.run(
+            [adapter, "--input-prefix", str(prefix), "--output", str(v2),
+             "--sample-count", "100", "--force"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if failed_force.returncode == 0 or "field count" not in failed_force.stderr:
+            raise AssertionError("malformed metadata unexpectedly passed --force")
+        if (v2 / "manifest.json").read_bytes() != protected_manifest or \
+                (v2 / "meta.tsv").read_bytes() != protected_meta:
+            raise AssertionError("failed --force conversion modified existing output")
+        if list(root.glob("fixture.nss.tmp.*")) or \
+                list(root.glob("fixture.nss.backup.*")):
+            raise AssertionError("failed --force conversion left temporary directories")
+        prefix = make_fixture(root)
 
         def corrupt(name, callback):
             target = root / name
@@ -422,8 +658,10 @@ def main():
         nan_output = root / "nan_v2_output"
         invoke(binary, nan_v2, nan_output,
                ["--overall-non-missing-rate", "1"], totalsize=False)
-        if "nan" not in pathlib.Path(str(nan_output) + "_results.table").read_text().lower():
-            raise AssertionError("v2 NaN row was not preserved")
+        _, nan_rows = row_map(nan_output)
+        if [nan_rows[0][name] for name in
+                ("BETA", "SE", "T_STAT", "NEG_LOG10_P", "VIF")] != ["NA"] * 5:
+            raise AssertionError("v2 NaN row was not preserved as table NA")
 
         duplicate_root = root / "duplicate"
         duplicate_root.mkdir()

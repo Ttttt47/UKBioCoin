@@ -32,8 +32,10 @@
 #include <boost/charconv.hpp>
 #include <boost/program_options.hpp>
 
+#include "adjustment.hpp"
 #include "nss_v2.hpp"
-#include "tools/cpp_cdfs-master/cdf_chisqt/cdf_base.h"
+#include "statistics.hpp"
+#include "table_metadata.hpp"
 
 namespace po = boost::program_options;
 using Eigen::MatrixXd;
@@ -428,21 +430,33 @@ public:
         covariate_inverse_ = decomposition.inverse();
     }
 
-    int minimum_valid_sample_size() const { return static_cast<int>(covariate_count_ + 1); }
+    bool valid_sample_size(int sample_size) const {
+        return ukc::residual_degrees_of_freedom(sample_size,
+                                                covariate_count_) > 0;
+    }
 
     std::array<double, 5> calculate(const vector<double> &cov_xy,
                                     double var_x, int sample_size) const {
+        const int residual_df = ukc::residual_degrees_of_freedom(
+            sample_size, covariate_count_);
+        if (residual_df <= 0) {
+            return {{std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::quiet_NaN()}};
+        }
         if (covariate_count_ == 0) {
             const double omega_inverse = 1.0 / var_x;
             const double beta = omega_inverse * cov_xy[0];
             const double rss = sample_size * (1.0 - beta * cov_xy[0]) /
-                               (sample_size - 1.0);
+                               residual_df;
             const double var_beta = rss * omega_inverse / sample_size;
             const double se = std::sqrt(var_beta);
             const double t = beta / se;
-            const double log_p = cdf_t_log(-std::abs(t), sample_size - 2) + std::log(2.0);
             const double vif = var_beta / (rss / ((sample_size - 1.0) * var_x));
-            return {{beta, se, t, -log_p * std::log10(std::exp(1.0)), vif}};
+            return {{beta, se, t,
+                     ukc::two_sided_t_neg_log10(t, residual_df), vif}};
         }
 
         MatrixXd theta = theta_base_;
@@ -471,14 +485,13 @@ public:
         const VectorXd coefficients = omega_inverse * association;
         const double rss = sample_size *
             (1.0 - (coefficients.transpose() * association).value()) /
-            (sample_size - (dimension - 2) - 1.0);
+            residual_df;
         const double var_beta = rss * omega_inverse(0, 0) / sample_size;
         const double se = std::sqrt(var_beta);
         const double t = coefficients[0] / se;
-        const double log_p = cdf_t_log(-std::abs(t), sample_size - 2) + std::log(2.0);
         const double vif = var_beta / (rss / ((sample_size - 1.0) * theta(1, 1)));
         return {{coefficients[0], se, t,
-                 -log_p * std::log10(std::exp(1.0)), vif}};
+                 ukc::two_sided_t_neg_log10(t, residual_df), vif}};
     }
 
 private:
@@ -525,8 +538,7 @@ void compute_numeric_batch(const vector<vector<double>> &cov_xy,
         result.quality_score = quality;
         result.sample_size = static_cast<int>(std::floor(total_sample_size * quality));
         if (any_non_finite(values) || !std::isfinite(var_x[i]) ||
-            result.sample_size <= 2 ||
-            result.sample_size <= model.minimum_valid_sample_size()) {
+            !model.valid_sample_size(result.sample_size)) {
             result.invalid = true;
             continue;
         }
@@ -538,6 +550,10 @@ void compute_numeric_batch(const vector<vector<double>> &cov_xy,
 }
 
 bool append_double(string &output, double value) {
+    if (!std::isfinite(value)) {
+        output.append("NA");
+        return true;
+    }
     char buffer[128];
     const auto converted = boost::charconv::to_chars(
         buffer, buffer + sizeof(buffer), value,
@@ -601,19 +617,19 @@ void write_result_rows(std::ofstream &output, const vector<string> &metadata,
             for (size_t i = begin; i < end; ++i) {
                 buffer.append(metadata[i]);
                 for (double value : results[i].summary) {
-                    buffer.push_back(' ');
+                    buffer.push_back('\t');
                     if (!append_double(buffer, value)) {
                         errors[static_cast<size_t>(worker)] = 1;
                         break;
                     }
                 }
                 if (errors[static_cast<size_t>(worker)] != 0) break;
-                buffer.append("  ");
+                buffer.push_back('\t');
                 if (!append_integer(buffer, results[i].sample_size)) {
                     errors[static_cast<size_t>(worker)] = 1;
                     break;
                 }
-                buffer.push_back(' ');
+                buffer.push_back('\t');
                 if (!append_double(buffer, results[i].quality_score)) {
                     errors[static_cast<size_t>(worker)] = 1;
                     break;
@@ -771,12 +787,6 @@ void run_v2(const string &directory, const string &result_filename,
                        " does not match manifest sample_count " +
                        std::to_string(total_sample_size));
     }
-    const int fixed_sample_size = static_cast<int>(std::floor(
-        total_sample_size * overall_non_missing_rate));
-    if (!use_missing && (fixed_sample_size <= 2 ||
-        fixed_sample_size <= static_cast<int>(variables.size()))) {
-        throw UkcError("Effective sample size is too small for the requested model");
-    }
     ukc::validate_manifest(directory, manifest, true, !npy_output);
     const vector<size_t> indices = select_v2_variables(manifest, variables);
     ukc::NpyReader cov_reader(ukc::join_path(directory, manifest.cov_yy.path),
@@ -807,18 +817,21 @@ void run_v2(const string &directory, const string &result_filename,
     std::ofstream &output = output_file.stream();
     const string meta_path = ukc::join_path(directory, manifest.meta_path);
     std::ifstream meta;
-    string meta_header;
+    ukc::MetadataProjection metadata_projection;
     const auto header_start = Clock::now();
     if (npy_output) {
         ukc::write_npy_f64_header(
             output, {manifest.variant_count, kResultColumnCount}, result_filename);
     } else {
         meta = open_input(meta_path);
+        string meta_header;
         if (!std::getline(meta, meta_header)) {
             throw UkcError(meta_path + ": missing header");
         }
-        output << meta_header
-               << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+        metadata_projection = ukc::parse_metadata_header(meta_header, meta_path);
+        output << ukc::metadata_header_tsv(metadata_projection)
+               << "\tBETA\tSE\tT_STAT\tNEG_LOG10_P\tVIF\tOBS_CT"
+                  "\tQUALITY_SCORE\n";
         if (!output) throw UkcError("Error writing regression result header");
     }
     const double header_seconds = elapsed_seconds(header_start);
@@ -853,7 +866,12 @@ void run_v2(const string &directory, const string &result_filename,
         if (!npy_output) {
             metadata.reserve(static_cast<size_t>(manifest.variant_count));
             string line;
-            while (std::getline(meta, line)) metadata.push_back(std::move(line));
+            std::size_t line_number = 1;
+            while (std::getline(meta, line)) {
+                ++line_number;
+                metadata.push_back(ukc::project_metadata_row(
+                    line, metadata_projection, meta_path, line_number));
+            }
             if (metadata.size() != manifest.variant_count) {
                 throw UkcError(meta_path + ": metadata row-count mismatch while loading");
             }
@@ -899,11 +917,15 @@ void run_v2(const string &directory, const string &result_filename,
             if (!npy_output) {
                 metadata.resize(count);
                 for (size_t i = 0; i < count; ++i) {
-                    if (!std::getline(meta, metadata[i])) {
+                    string line;
+                    if (!std::getline(meta, line)) {
                         throw UkcError(meta_path +
                                        ": metadata row-count mismatch near row " +
                                        std::to_string(completed + i + 1));
                     }
+                    metadata[i] = ukc::project_metadata_row(
+                        line, metadata_projection, meta_path,
+                        static_cast<size_t>(completed + i + 2));
                 }
             }
             timings.loading += elapsed_seconds(load_start);
@@ -983,8 +1005,7 @@ void process_legacy_batch(const vector<InputRow> &batch,
             result.quality_score = quality;
             result.sample_size = static_cast<int>(std::floor(total_sample_size * quality));
             if (any_non_finite(cov_xy) || !std::isfinite(var_x) ||
-                result.sample_size <= 2 ||
-                result.sample_size <= model.minimum_valid_sample_size()) {
+                !model.valid_sample_size(result.sample_size)) {
                 result.invalid = true;
                 continue;
             }
@@ -1039,7 +1060,10 @@ void run_v1(const string &prefix, const string &result_filename,
     if (use_missing && !std::getline(x_missing, x_header)) throw UkcError(x_missing_file + ": missing header");
     const vector<SelectedColumn> selected = select_columns(parse_header(cov_header, cov_xy_file), variables, cov_xy_file);
     parse_header(var_header, var_x_file);
-    if (!npy_output) parse_header(meta_header, meta_file);
+    ukc::MetadataProjection metadata_projection;
+    if (!npy_output) {
+        metadata_projection = ukc::parse_metadata_header(meta_header, meta_file);
+    }
     if (use_missing) parse_header(x_header, x_missing_file);
 
     AtomicOutputFile output_file(result_filename);
@@ -1049,8 +1073,9 @@ void run_v1(const string &prefix, const string &result_filename,
         ukc::write_npy_f64_header(output, {variants, kResultColumnCount},
                                   result_filename);
     } else {
-        output << meta_header
-               << " BETA SE T-STAT -log10_P VIF nobs Quality-Score\n";
+        output << ukc::metadata_header_tsv(metadata_projection)
+               << "\tBETA\tSE\tT_STAT\tNEG_LOG10_P\tVIF\tOBS_CT"
+                  "\tQUALITY_SCORE\n";
         if (!output) throw UkcError("Error writing regression result header");
     }
     const double header_seconds = elapsed_seconds(header_start);
@@ -1078,6 +1103,10 @@ void run_v1(const string &prefix, const string &result_filename,
                                std::to_string(completed + i + 1));
             }
             row.line_number = static_cast<size_t>(completed + i + 2);
+            if (!npy_output) {
+                row.meta = ukc::project_metadata_row(
+                    row.meta, metadata_projection, meta_file, row.line_number);
+            }
             batch.push_back(std::move(row));
         }
         timings.loading += elapsed_seconds(load_start);
@@ -1138,7 +1167,11 @@ void print_banner() {
 
 int main(int argc, const char *argv[]) {
     print_banner();
-    po::options_description options("\nUsage: Linear regression based on summary data.\n\nOptions:\n");
+    po::options_description options(
+        "\nUsage:\n"
+        "  UKBioCoin --file <NSS> --phe <name> --out <prefix> [options]\n"
+        "  UKBioCoin --adjust-file <results.table|results.npy> --out <prefix> "
+        "[options]\n\nOptions");
     options.add_options()
         ("help,h", "help")
         ("use-missing-rate-file", "Legacy compatibility option.")
@@ -1146,6 +1179,10 @@ int main(int argc, const char *argv[]) {
         ("file", po::value<string>(), "NSS v2 directory or NSS v1 file prefix.")
         ("phe", po::value<string>(), "Phenotype name.")
         ("covar", po::value<string>(), "Comma-separated covariate names.")
+        ("adjust-file", po::value<string>(),
+         "Run genomic-control adjustment on a UKC table or NPY result.")
+        ("lambda", po::value<double>(),
+         "Positive finite genomic-control lambda (default: estimate from T_STAT).")
         ("out", po::value<string>(), "Output file prefix.")
         ("totalsize", po::value<int>(), "Base sample size (v2 defaults to manifest; v1 defaults to 292216).")
         ("overall-non-missing-rate", po::value<double>()->default_value(0.9, "0.9"), "Overall non-missing rate.")
@@ -1166,6 +1203,45 @@ int main(int argc, const char *argv[]) {
             std::cout << options << '\n';
             return EXIT_SUCCESS;
         }
+
+        const string output_format = arguments["output-format"].as<string>();
+        if (output_format != "table" && output_format != "npy") {
+            throw UkcError("--output-format must be 'table' or 'npy'");
+        }
+        if (arguments.count("adjust-file")) {
+            if (!arguments.count("out")) {
+                throw UkcError("Adjustment mode requires --out");
+            }
+            if (arguments.count("file") || arguments.count("phe") ||
+                arguments.count("covar")) {
+                throw UkcError(
+                    "--adjust-file is mutually exclusive with --file, --phe, and --covar");
+            }
+            const bool regression_only_option =
+                arguments.count("totalsize") != 0 ||
+                arguments.count("use-missing-rate-file") != 0 ||
+                arguments.count("use-missing-rate-estimate") != 0 ||
+                !arguments["overall-non-missing-rate"].defaulted() ||
+                !arguments["threads"].defaulted() ||
+                !arguments["io-mode"].defaulted();
+            if (regression_only_option) {
+                throw UkcError(
+                    "Regression-only options cannot be used with --adjust-file");
+            }
+            ukc::AdjustmentOptions adjustment;
+            adjustment.input_path = arguments["adjust-file"].as<string>();
+            adjustment.output_prefix = arguments["out"].as<string>();
+            adjustment.output_format = output_format;
+            adjustment.lambda_supplied = arguments.count("lambda") != 0;
+            if (adjustment.lambda_supplied) {
+                adjustment.lambda = arguments["lambda"].as<double>();
+            }
+            ukc::run_adjustment(adjustment);
+            return EXIT_SUCCESS;
+        }
+        if (arguments.count("lambda")) {
+            throw UkcError("--lambda is only valid with --adjust-file");
+        }
         if (!arguments.count("file") || !arguments.count("phe") ||
             !arguments.count("out")) {
             throw UkcError("Required options: --file, --phe, and --out");
@@ -1174,7 +1250,6 @@ int main(int argc, const char *argv[]) {
         const string phenotype = arguments["phe"].as<string>();
         const string output = arguments["out"].as<string>();
         const string io_mode = arguments["io-mode"].as<string>();
-        const string output_format = arguments["output-format"].as<string>();
         const int threads = arguments["threads"].as<int>();
         const double overall = arguments["overall-non-missing-rate"].as<double>();
         const bool use_missing = arguments.count("use-missing-rate-estimate") != 0;
@@ -1183,9 +1258,6 @@ int main(int argc, const char *argv[]) {
         }
         if (io_mode != "stream" && io_mode != "memory") {
             throw UkcError("--io-mode must be 'stream' or 'memory'");
-        }
-        if (output_format != "table" && output_format != "npy") {
-            throw UkcError("--output-format must be 'table' or 'npy'");
         }
         if (threads <= 0) throw UkcError("--threads must be greater than zero");
         if (!std::isfinite(overall) || overall <= 0.0 || overall > 1.0) {
@@ -1218,11 +1290,6 @@ int main(int argc, const char *argv[]) {
                    supplied_total_size, overall, use_missing, io_mode, threads,
                    npy_output);
         } else {
-            const int fixed = static_cast<int>(std::floor(supplied_total_size * overall));
-            if (!use_missing && (fixed <= 2 ||
-                fixed <= static_cast<int>(variables.size()))) {
-                throw UkcError("Effective sample size is too small for the requested model");
-            }
             run_v1(input, result_filename, variables, supplied_total_size, overall,
                    use_missing, io_mode, threads, npy_output);
         }

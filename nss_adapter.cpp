@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include "nss_v2.hpp"
+#include "table_metadata.hpp"
 
 namespace fs = boost::filesystem;
 namespace po = boost::program_options;
@@ -210,18 +211,21 @@ void copy_metadata_as_tsv(const string &source, const string &destination,
     std::ofstream output(destination);
     if (!output) throw ukc::NssError("Error opening " + destination + " for output");
     string line;
+    if (!std::getline(input, line)) {
+        throw ukc::NssError(source + ": missing metadata header");
+    }
+    const ukc::MetadataProjection projection =
+        ukc::parse_metadata_header(line, source);
+    output << ukc::metadata_header_tsv(projection) << '\n';
     std::uint64_t rows = 0;
-    size_t line_number = 0;
+    size_t line_number = 1;
     while (std::getline(input, line)) {
         ++line_number;
-        const vector<string> fields = tokens(line, source, line_number);
-        if (fields.empty()) throw ukc::NssError(source + ": empty metadata row");
-        for (size_t i = 0; i < fields.size(); ++i) {
-            output << (i == 0 ? "" : "\t") << fields[i];
-        }
-        output << '\n';
-        if (line_number > 1) ++rows;
+        output << ukc::project_metadata_row(line, projection, source, line_number)
+               << '\n';
+        ++rows;
     }
+    if (!output) throw ukc::NssError("Error writing " + destination);
     if (rows != expected_rows) {
         throw ukc::NssError(source + ": metadata row count " + std::to_string(rows) +
                             " does not match var_x length " + std::to_string(expected_rows));
