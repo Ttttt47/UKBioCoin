@@ -20,7 +20,7 @@ A step-by-step example can be found in `./demo`.
 
 
 
-## Using UKBioCoin
+## Installation options
 
 ### Docker images
 
@@ -67,6 +67,55 @@ To ensure the exact version of the environment and NSS data used in our manuscri
 ```text
 swr.cn-east-3.myhuaweicloud.com/ukbiocoin/ukbiocoin_full@sha256:9ac4148b6ec997d312fb4d56918bde36c3cef473146fbcc307f3fd3457aa3f47
 ```
+
+### Building the current UKC core from source
+
+Build from source to use NSS v2, multithreading, stream/memory I/O modes,
+numeric NPY output, and genomic-control adjustment.
+
+#### Reproducible development environment
+
+The supplied environment includes R, the R packages used by `demo/script.R`,
+NumPy, PLINK2, Boost, CMake, Ninja, and a C++ compiler. Eigen is intentionally
+not duplicated and is supplied to CMake as an include path.
+
+```bash
+mamba env create -f environment.yml
+mamba activate ukbiocoin-dev
+```
+
+#### Building and testing UKBioCoin
+
+UKBioCoin requires C++14. If Eigen is installed in a standard system location,
+CMake will find it automatically. Otherwise, provide the directory containing
+`Eigen/Dense` through `EIGEN3_INCLUDE_DIR`:
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DEIGEN3_INCLUDE_DIR=/path/to/eigen3
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+The executables are written to `build/UKBioCoin` and
+`build/UKBioCoinNSSAdapter`.
+
+`ctest` covers the regression formulas, metadata compatibility, adapter
+atomicity, strict NPY validation, and GC table/NPY combinations. To additionally
+regenerate and validate the repository's full 100,000-variant demo (including
+PLINK2 comparison and the validation plot), run:
+
+```bash
+python tests/test_demo.py \
+  build/UKBioCoin \
+  build/UKBioCoinNSSAdapter \
+  "$(command -v Rscript)"
+```
+
+This integration test requires the demo R environment and `plink2`; it is kept
+outside routine CTest because it regenerates both v2 and legacy NSS datasets.
+
+## Using UKBioCoin
 
 ### Running the updated UKBioCoin core from the command line
 
@@ -250,50 +299,7 @@ for the test design and single-thread measurements.
 
 
 
-## Building UKBioCoin with your own dataset
-
-### Building the UKC executable
-
-To use the latest UKC core, build the `UKBioCoin` executable from the current source code.
-
-#### Reproducible development environment
-
-The supplied environment includes R, the R packages used by `demo/script.R`, NumPy (for interoperability tests), PLINK2, Boost, CMake, Ninja, and a C++ compiler. Eigen is intentionally not duplicated and is supplied to CMake as an include path.
-
-```bash
-mamba env create -f environment.yml
-mamba activate ukbiocoin-dev
-```
-
-#### Building and testing UKBioCoin
-
-UKBioCoin requires C++14. If Eigen is installed in a standard system location,
-CMake will find it automatically. Otherwise, provide the directory containing
-`Eigen/Dense` through `EIGEN3_INCLUDE_DIR`:
-
-```bash
-cmake -S . -B build -G Ninja \
-  -DEIGEN3_INCLUDE_DIR=/path/to/eigen3
-cmake --build build
-ctest --test-dir build --output-on-failure
-```
-
-The executables are written to `build/UKBioCoin` and `build/UKBioCoinNSSAdapter`.
-
-`ctest` covers the regression formulas, metadata compatibility, adapter
-atomicity, strict NPY validation, and GC table/NPY combinations. To additionally
-regenerate and validate the repository's full 100,000-variant demo (including
-PLINK2 comparison and the validation plot), run:
-
-```bash
-python tests/test_demo.py \
-  build/UKBioCoin \
-  build/UKBioCoinNSSAdapter \
-  "$(command -v Rscript)"
-```
-
-This integration test requires the demo R environment and `plink2`; it is kept
-outside routine CTest because it regenerates both v2 and legacy NSS datasets.
+## Preparing NSS for your own dataset
 
 ### Generating Naive Summary Statistics (NSS) for UKBioCoin
 
